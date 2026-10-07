@@ -1,5 +1,10 @@
 import { AsyncPipe } from "@angular/common";
-import { ChangeDetectionStrategy, Component, inject } from "@angular/core";
+import {
+  ChangeDetectionStrategy,
+  Component,
+  inject,
+  isDevMode,
+} from "@angular/core";
 import { MatBadge } from "@angular/material/badge";
 import { MatAnchor, MatButton, MatIconButton } from "@angular/material/button";
 import { MatIcon } from "@angular/material/icon";
@@ -44,6 +49,9 @@ import { SearchComponent } from "../search/search.component";
 })
 export class NavBarComponent {
   private readonly store = inject(Store);
+
+  /** The backend serves its API reference (/scalar) in Development only, so only dev builds link to it. */
+  protected readonly showApiDocs = isDevMode();
 
   userType: UserType;
 

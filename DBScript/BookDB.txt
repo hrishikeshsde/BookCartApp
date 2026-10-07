@@ -29,13 +29,18 @@ UserID int IDENTITY(1,1) PRIMARY KEY,
 FirstName varchar(20) NOT NULL ,
 LastName varchar(20) NOT NULL,
 Username varchar(20) NOT NULL,
-Password varchar(40) NOT NULL,
+Password varchar(40) NULL, -- legacy plaintext column, emptied as users log in (see B0.2_password_hash.sql)
+PasswordHash varchar(256) NULL,
 Gender varchar(6) NOT NULL,
 UserTypeID int NOT NULL,   
 )  
 GO
 
-INSERT INTO UserMaster VALUES('Ankit','Sharma','adminuser','qwerty','Male',1); -- Add the record for Admin user.
+CREATE UNIQUE INDEX UX_UserMaster_Username ON UserMaster(Username);
+GO
+
+-- No admin account is seeded: passwords are stored hashed, so a plaintext seed row cannot work.
+-- Register a user through the app, then promote it:  UPDATE UserMaster SET UserTypeID = 1 WHERE Username = '<username>';
 ---------------------------------------------------------------------------
 CREATE TABLE Book(
 BookID int IDENTITY(1,1) PRIMARY KEY,  

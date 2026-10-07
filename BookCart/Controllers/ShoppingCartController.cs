@@ -1,29 +1,45 @@
 ﻿using BookCart.Dto;
 using BookCart.Interfaces;
+using BookCart.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BookCart.Controllers
 {
+    // Carts are usable by signed-in users and by anonymous guests (see GuestController). [AllowAnonymous] is applied
+    // per action, because on the class it would also override [Authorize] on SetShoppingCart. [RequireOwner] makes
+    // every {userId} route accept only the caller's own user id or guest id.
+    [RequireOwner]
+    [ApiController]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Route("api/[controller]")]
-    public class ShoppingCartController(ICartService cartService, IBookService bookService) : Controller
+    public class ShoppingCartController(ICartService cartService, IBookService bookService, ICurrentUser currentUser) : ControllerBase
     {
         readonly ICartService _cartService = cartService;
         readonly IBookService _bookService = bookService;
+        readonly ICurrentUser _currentUser = currentUser;
 
         /// <summary>
-        /// Get the shopping cart for a user upon Login. If the user logs in for the first time, creates the shopping cart.
+        /// Merge the caller's guest cart into their own cart after login.
         /// </summary>
-        /// <param name="oldUserId"></param>
-        /// <param name="newUserId"></param>
+        /// <param name="oldUserId">The caller's guest id (from the guest cookie)</param>
+        /// <param name="newUserId">The caller's own user id</param>
         /// <returns>The count of items in shopping cart</returns>
         [Authorize]
         [HttpGet]
-        [Route("SetShoppingCart/{oldUserId}/{newUserId}")]
-        public int Get(int oldUserId, int newUserId)
+        [Route("SetShoppingCart/{oldUserId:int}/{newUserId:int}")]
+        public IActionResult Get(int oldUserId, int newUserId)
         {
+            // Only the signed-in user's own cart can be the target, and only their own guest cart the source.
+            // Never another user's cart, and admins get no exception: merging deletes the source cart.
+            if (_currentUser.UserId != newUserId || _currentUser.GuestId != oldUserId)
+            {
+                return Forbid();
+            }
+
             _cartService.MergeCart(oldUserId, newUserId);
-            return _cartService.GetCartItemCount(newUserId);
+            return Ok(_cartService.GetCartItemCount(newUserId));
         }
 
         /// <summary>
@@ -31,7 +47,8 @@ namespace BookCart.Controllers
         /// </summary>
         /// <param name="userId"></param>
         /// <returns></returns>
-        [HttpGet("{userId}")]
+        [AllowAnonymous]
+        [HttpGet("{userId:int}")]
         public async Task<List<CartItemDto>> Get(int userId)
         {
             string cartid = _cartService.GetCartId(userId);
@@ -44,8 +61,9 @@ namespace BookCart.Controllers
         /// <param name="userId"></param>
         /// <param name="bookId"></param>
         /// <returns></returns>
+        [AllowAnonymous]
         [HttpPost]
-        [Route("AddToCart/{userId}/{bookId}")]
+        [Route("AddToCart/{userId:int}/{bookId:int}")]
         public async Task<List<CartItemDto>> Post(int userId, int bookId)
         {
             _cartService.AddBookToCart(userId, bookId);
@@ -58,7 +76,8 @@ namespace BookCart.Controllers
         /// <param name="userId"></param>
         /// <param name="bookId"></param>
         /// <returns></returns>
-        [HttpPut("{userId}/{bookId}")]
+        [AllowAnonymous]
+        [HttpPut("{userId:int}/{bookId:int}")]
         public async Task<List<CartItemDto>> Put(int userId, int bookId)
         {
             _cartService.DeleteOneCartItem(userId, bookId);
@@ -71,7 +90,8 @@ namespace BookCart.Controllers
         /// <param name="userId"></param>
         /// <param name="bookId"></param>
         /// <returns></returns>
-        [HttpDelete("{userId}/{bookId}")]
+        [AllowAnonymous]
+        [HttpDelete("{userId:int}/{bookId:int}")]
         public async Task<List<CartItemDto>> Delete(int userId, int bookId)
         {
             _cartService.RemoveCartItem(userId, bookId);
@@ -83,7 +103,8 @@ namespace BookCart.Controllers
         /// </summary>
         /// <param name="userId"></param>
         /// <returns></returns>
-        [HttpDelete("{userId}")]
+        [AllowAnonymous]
+        [HttpDelete("{userId:int}")]
         public int Delete(int userId)
         {
             return _cartService.ClearCart(userId);

@@ -4,10 +4,6 @@ namespace BookCart.Models
 {
     public partial class BookDBContext : DbContext
     {
-        public BookDBContext()
-        {
-        }
-
         public BookDBContext(DbContextOptions<BookDBContext> options)
             : base(options)
         {
@@ -23,10 +19,6 @@ namespace BookCart.Models
         public virtual DbSet<UserType> UserType { get; set; }
         public virtual DbSet<Wishlist> Wishlist { get; set; }
         public virtual DbSet<WishlistItems> WishlistItems { get; set; }
-
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-        {
-        }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -141,8 +133,11 @@ namespace BookCart.Models
                     .IsUnicode(false);
 
                 entity.Property(e => e.Password)
-                    .IsRequired()
                     .HasMaxLength(40)
+                    .IsUnicode(false);
+
+                entity.Property(e => e.PasswordHash)
+                    .HasMaxLength(256)
                     .IsUnicode(false);
 
                 entity.Property(e => e.UserTypeId).HasColumnName("UserTypeID");
@@ -151,6 +146,10 @@ namespace BookCart.Models
                     .IsRequired()
                     .HasMaxLength(20)
                     .IsUnicode(false);
+
+                entity.HasIndex(e => e.Username)
+                    .IsUnique()
+                    .HasDatabaseName("UX_UserMaster_Username");
             });
 
             modelBuilder.Entity<UserType>(entity =>

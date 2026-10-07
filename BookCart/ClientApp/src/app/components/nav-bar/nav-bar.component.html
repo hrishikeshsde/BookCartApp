@@ -68,26 +68,24 @@
       </mat-menu>
       }}
 
+      <!-- The API reference only exists in Development builds of the backend. -->
+      @if (showApiDocs) {
       <a
         mat-flat-button
         color="primary"
-        href="/swagger/index.html"
+        href="/scalar/v1"
         target="_blank"
+        rel="noopener noreferrer"
         matTooltip="API details"
       >
-        <span
-          ><img
-            class="swagger-icon"
-            src="https://static1.smartbear.co/swagger/media/assets/swagger_fav.png"
-            alt="Swagger icon"
-        /></span>
-        Swagger
+        API docs
       </a>
+      }
 
       <a
         mat-flat-button
         color="primary"
-        href="https://github.com/AnkitSharma-007/bookcart"
+        href="https://github.com/hrishikeshsde"
         target="_blank"
         matTooltip="GitHub"
         ><i class="fa fa-github"></i>

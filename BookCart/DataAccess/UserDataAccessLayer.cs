@@ -1,24 +1,31 @@
 ﻿using BookCart.Dto;
 using BookCart.Interfaces;
 using BookCart.Models;
+using BookCart.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookCart.DataAccess
 {
-    public class UserDataAccessLayer(BookDBContext dbContext) : IUserService
+    public class UserDataAccessLayer(BookDBContext dbContext, IPasswordService passwordService) : IUserService
     {
         readonly BookDBContext _dbContext = dbContext;
+        readonly IPasswordService _passwordService = passwordService;
 
         public AuthenticatedUser AuthenticateUser(UserLogin loginCredentials)
         {
             AuthenticatedUser authenticatedUser = new();
 
-            var userDetails = _dbContext.UserMaster.FirstOrDefault(
-                u => u.Username == loginCredentials.Username && u.Password == loginCredentials.Password
-                );
+            var userDetails = _dbContext.UserMaster.FirstOrDefault(u => u.Username == loginCredentials.Username);
 
-            if (userDetails != null)
+            if (userDetails != null && _passwordService.Verify(userDetails, loginCredentials.Password, out bool needsRehash))
             {
+                if (needsRehash)
+                {
+                    // Upgrade a legacy plaintext row (or an outdated hash) and drop the plaintext.
+                    userDetails.PasswordHash = _passwordService.Hash(userDetails, loginCredentials.Password);
+                    userDetails.Password = null;
+                    _dbContext.SaveChanges();
+                }
 
                 authenticatedUser = new AuthenticatedUser
                 {

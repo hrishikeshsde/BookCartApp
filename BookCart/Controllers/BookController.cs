@@ -1,37 +1,37 @@
-﻿using BookCart.Interfaces;
+﻿using BookCart.Extensions;
+using BookCart.Interfaces;
 using BookCart.Models;
+using BookCart.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Newtonsoft.Json;
-using System.Net.Http.Headers;
+using Microsoft.AspNetCore.OutputCaching;
+using System.Text.Json;
 
 namespace BookCart.Controllers
 {
     [Produces("application/json")]
+    [ApiController]
     [Route("api/[controller]")]
-    public class BookController : Controller
+    public class BookController(IBookService bookService, CoverStorage coverStorage, IOutputCacheStore outputCache, ILogger<BookController> logger) : ControllerBase
     {
-        readonly IWebHostEnvironment _hostingEnvironment;
-        readonly IBookService _bookService;
-        readonly IConfiguration _config;
-        readonly string coverImageFolderPath = string.Empty;
+        // The admin form sends camelCase names and its price field as a string ("12.5"). Newtonsoft accepted both by
+        // default; System.Text.Json only does with the Web defaults (case-insensitive names, numbers from strings).
+        static readonly JsonSerializerOptions BookFormJson = new(JsonSerializerDefaults.Web);
 
-        public BookController(IConfiguration config, IWebHostEnvironment hostingEnvironment, IBookService bookService)
-        {
-            _config = config ?? throw new ArgumentNullException(nameof(config));
-            _bookService = bookService ?? throw new ArgumentNullException(nameof(bookService));
-            _hostingEnvironment = hostingEnvironment ?? throw new ArgumentNullException(nameof(hostingEnvironment));
-            coverImageFolderPath = Path.Combine(_hostingEnvironment.WebRootPath, "Upload");
-            if (!Directory.Exists(coverImageFolderPath))
-            {
-                Directory.CreateDirectory(coverImageFolderPath);
-            }
-        }
+        // The cover is capped at CoverStorage.MaxBytes (2 MB); this leaves room for the rest of the multipart form.
+        const int MaxRequestBytes = 3_000_000;
+
+        readonly IBookService _bookService = bookService;
+        readonly CoverStorage _covers = coverStorage;
+        readonly IOutputCacheStore _outputCache = outputCache;
+        readonly ILogger<BookController> _logger = logger;
 
         /// <summary>
         /// Get the list of available books
         /// </summary>
         /// <returns>List of Book</returns>
+        [AllowAnonymous]
+        [OutputCache(PolicyName = ApiExtensions.CatalogCachePolicy)]
         [HttpGet]
         public async Task<List<Book>> Get()
         {
@@ -43,7 +43,10 @@ namespace BookCart.Controllers
         /// </summary>
         /// <param name="id"></param>
         /// <returns></returns>
-        [HttpGet("{id}")]
+        [AllowAnonymous]
+        [HttpGet("{id:int}")]
+        [ProducesResponseType(typeof(Book), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public IActionResult Get(int id)
         {
             Book book = _bookService.GetBookData(id);
@@ -58,6 +61,8 @@ namespace BookCart.Controllers
         /// Get the list of available categories
         /// </summary>
         /// <returns></returns>
+        [AllowAnonymous]
+        [OutputCache(PolicyName = ApiExtensions.CatalogCachePolicy)]
         [HttpGet]
         [Route("GetCategoriesList")]
         public async Task<IEnumerable<Categories>> CategoryDetails()
@@ -70,8 +75,11 @@ namespace BookCart.Controllers
         /// </summary>
         /// <param name="bookId"></param>
         /// <returns></returns>
+        [AllowAnonymous]
         [HttpGet]
-        [Route("GetSimilarBooks/{bookId}")]
+        [Route("GetSimilarBooks/{bookId:int}")]
+        [ProducesResponseType(typeof(List<Book>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<List<Book>> SimilarBooks(int bookId)
         {
             return await Task.FromResult(_bookService.GetSimilarBooks(bookId)).ConfigureAwait(true);
@@ -81,32 +89,40 @@ namespace BookCart.Controllers
         /// Add a new book record
         /// </summary>
         /// <returns></returns>
-        [HttpPost, DisableRequestSizeLimit]
+        [HttpPost]
+        [RequestSizeLimit(MaxRequestBytes)]
         [Authorize(Policy = UserRoles.Admin)]
-        public int Post()
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        public async Task<IActionResult> Post(CancellationToken cancellationToken)
         {
-            Book book = JsonConvert.DeserializeObject<Book>(Request.Form["bookFormData"].ToString());
+            var (book, cover, error) = await ReadBookForm(cancellationToken);
+            if (error is not null) return error;
 
-            if (Request.Form.Files.Count > 0)
+            book!.BookId = 0;   // the database assigns the id
+            string? savedCover = null;
+            try
             {
-                var file = Request.Form.Files[0];
-
-                if (file.Length > 0 && !string.IsNullOrEmpty(file.ContentDisposition))
-                {
-                    string fileName = $"{Guid.NewGuid()}{ContentDispositionHeaderValue.Parse(file.ContentDisposition).FileName.Trim('"')}";
-                    string fullPath = Path.Combine(coverImageFolderPath, fileName);
-                    using (var stream = new FileStream(fullPath, FileMode.Create))
-                    {
-                        file.CopyTo(stream);
-                    }
-                    book.CoverFileName = fileName;
-                }
+                // The client never chooses the cover file name: it is the generated name, or the default.
+                book.CoverFileName = cover is null
+                    ? _covers.DefaultFileName
+                    : savedCover = await _covers.SaveAsync(cover, cancellationToken);
+                var result = _bookService.AddBook(book);
+                await _outputCache.EvictByTagAsync(ApiExtensions.CatalogCachePolicy, cancellationToken);
+                _logger.LogInformation("Admin {AdminId} added book {BookId} '{Title}'", AdminId, book.BookId, book.Title);
+                return Ok(result);
             }
-            else
+            catch (InvalidUploadException ex)
             {
-                book.CoverFileName = _config["DefaultCoverImageFile"] ?? throw new InvalidOperationException("Default cover image file is not configured.");
+                return BadRequest(ex.Message);
             }
-            return _bookService.AddBook(book);
+            catch
+            {
+                _covers.Delete(savedCover);   // do not leave an orphaned file behind a failed insert
+                throw;
+            }
         }
 
         /// <summary>
@@ -114,31 +130,48 @@ namespace BookCart.Controllers
         /// </summary>
         /// <returns></returns>
         [HttpPut]
+        [RequestSizeLimit(MaxRequestBytes)]
         [Authorize(Policy = UserRoles.Admin)]
-        public int Put()
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> Put(CancellationToken cancellationToken)
         {
-            Book book = JsonConvert.DeserializeObject<Book>(Request.Form["bookFormData"].ToString());
-            if (Request.Form.Files.Count > 0)
+            var (book, cover, error) = await ReadBookForm(cancellationToken);
+            if (error is not null) return error;
+
+            var existing = _bookService.GetBookData(book!.BookId);
+            if (existing is null) return NotFound();
+
+            // A cover name sent by the client is ignored; null makes the data layer keep the stored one.
+            book.CoverFileName = null;
+            string? savedCover = null;
+            try
             {
-                var file = Request.Form.Files[0];
-
-                if (file.Length > 0)
+                if (cover is not null)
                 {
-                    string fileName = Guid.NewGuid() + ContentDispositionHeaderValue.Parse(file.ContentDisposition).FileName.Trim('"');
-                    string fullPath = Path.Combine(coverImageFolderPath, fileName);
-                    bool isFileExists = Directory.Exists(fullPath);
-
-                    if (!isFileExists)
-                    {
-                        using (var stream = new FileStream(fullPath, FileMode.Create))
-                        {
-                            file.CopyTo(stream);
-                        }
-                        book.CoverFileName = fileName;
-                    }
+                    book.CoverFileName = savedCover = await _covers.SaveAsync(cover, cancellationToken);
                 }
+                var result = _bookService.UpdateBook(book);
+                if (savedCover is not null)
+                {
+                    _covers.Delete(existing.CoverFileName);   // replaced: the old file is no longer referenced
+                }
+                await _outputCache.EvictByTagAsync(ApiExtensions.CatalogCachePolicy, cancellationToken);
+                _logger.LogInformation("Admin {AdminId} updated book {BookId}{CoverChange}", AdminId, book.BookId, savedCover is null ? "" : " (cover replaced)");
+                return Ok(result);
             }
-            return _bookService.UpdateBook(book);
+            catch (InvalidUploadException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch
+            {
+                _covers.Delete(savedCover);
+                throw;
+            }
         }
 
         /// <summary>
@@ -146,20 +179,46 @@ namespace BookCart.Controllers
         /// </summary>
         /// <param name="id"></param>
         /// <returns></returns>
-        [HttpDelete("{id}")]
+        [HttpDelete("{id:int}")]
         [Authorize(Policy = UserRoles.Admin)]
-        public int Delete(int id)
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
         {
-            string coverFileName = _bookService.DeleteBook(id);
-            if (coverFileName != _config["DefaultCoverImageFile"])
+            if (_bookService.GetBookData(id) is null) return NotFound();
+
+            _covers.Delete(_bookService.DeleteBook(id));
+            await _outputCache.EvictByTagAsync(ApiExtensions.CatalogCachePolicy, cancellationToken);
+            _logger.LogInformation("Admin {AdminId} deleted book {BookId}", AdminId, id);
+            return Ok(1);
+        }
+
+        string? AdminId => User.FindFirst("userId")?.Value;
+
+        /// <summary>Reads the multipart form the admin UI sends: the book as JSON in <c>bookFormData</c>, plus an optional cover file.</summary>
+        async Task<(Book? Book, IFormFile? Cover, IActionResult? Error)> ReadBookForm(CancellationToken cancellationToken)
+        {
+            if (!Request.HasFormContentType)
             {
-                string fullPath = Path.Combine(coverImageFolderPath, coverFileName);
-                if (System.IO.File.Exists(fullPath))
-                {
-                    System.IO.File.Delete(fullPath);
-                }
+                return (null, null, BadRequest("Expected a multipart/form-data request."));
             }
-            return 1;
+
+            var form = await Request.ReadFormAsync(cancellationToken);
+            Book? book;
+            try
+            {
+                book = JsonSerializer.Deserialize<Book>(form["bookFormData"].ToString(), BookFormJson);
+            }
+            catch (JsonException)
+            {
+                book = null;
+            }
+
+            return book is null
+                ? (null, null, BadRequest("The form field 'bookFormData' must contain the book as JSON."))
+                : (book, form.Files.Count > 0 ? form.Files[0] : null, null);
         }
     }
 }

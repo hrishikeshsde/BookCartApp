@@ -70,7 +70,11 @@ export class AuthEffects {
           );
           userDetails.userId = decodeUserDetails.userId;
           userDetails.username = decodeUserDetails.name;
-          userDetails.userTypeName = decodeUserDetails.sub;
+          // "sub" is the user id; the role is in the role claim (older tokens carried it in both).
+          userDetails.userTypeName =
+            decodeUserDetails[
+              "http://schemas.microsoft.com/ws/2008/06/identity/claims/role"
+            ] ?? decodeUserDetails.role;
 
           return setAuthState({
             user: userDetails,

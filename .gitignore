@@ -229,3 +229,7 @@ _Pvt_Extensions
 
 # FAKE - F# Make
 .fake/
+
+# Uploaded book covers are user data, not source. Only the default cover ships with the repo.
+BookCart/wwwroot/Upload/*
+!BookCart/wwwroot/Upload/Default_image.jpg

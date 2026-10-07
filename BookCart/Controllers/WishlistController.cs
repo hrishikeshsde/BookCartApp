@@ -1,12 +1,17 @@
 ﻿using BookCart.Interfaces;
 using BookCart.Models;
+using BookCart.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BookCart.Controllers
 {
+    [RequireOwner]
+    [ApiController]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Route("api/[controller]")]
-    public class WishlistController(IWishlistService wishlistService, IBookService bookService, IUserService userService) : Controller
+    public class WishlistController(IWishlistService wishlistService, IBookService bookService, IUserService userService) : ControllerBase
     {
         readonly IWishlistService _wishlistService = wishlistService;
         readonly IBookService _bookService = bookService;
@@ -17,7 +22,7 @@ namespace BookCart.Controllers
         /// </summary>
         /// <param name="userId"></param>
         /// <returns>All the items in the Wishlist</returns>
-        [HttpGet("{userId}")]
+        [HttpGet("{userId:int}")]
         public async Task<List<Book>> Get(int userId)
         {
             return await GetUserWishlist(userId);
@@ -31,7 +36,7 @@ namespace BookCart.Controllers
         /// <returns>All the items in the Wishlist</returns>
         [Authorize]
         [HttpPost]
-        [Route("ToggleWishlist/{userId}/{bookId}")]
+        [Route("ToggleWishlist/{userId:int}/{bookId:int}")]
         public async Task<List<Book>> Post(int userId, int bookId)
         {
             _wishlistService.ToggleWishlistItem(userId, bookId);
@@ -44,7 +49,7 @@ namespace BookCart.Controllers
         /// <param name="userId"></param>
         /// <returns></returns>
         [Authorize]
-        [HttpDelete("{userId}")]
+        [HttpDelete("{userId:int}")]
         public int Delete(int userId)
         {
             return _wishlistService.ClearWishlist(userId);

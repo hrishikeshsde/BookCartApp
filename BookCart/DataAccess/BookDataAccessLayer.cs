@@ -1,4 +1,5 @@
 ﻿using BookCart.Dto;
+using BookCart.Errors;
 using BookCart.Interfaces;
 using BookCart.Models;
 using Microsoft.EntityFrameworkCore;
@@ -40,7 +41,7 @@ namespace BookCart.DataAccess
         {
             try
             {
-                Book oldBookData = GetBookData(book.BookId);
+                Book oldBookData = GetBookData(book.BookId) ?? throw new NotFoundException($"Book {book.BookId} does not exist.");
 
                 if (oldBookData.CoverFileName != null)
                 {
@@ -83,7 +84,7 @@ namespace BookCart.DataAccess
         {
             try
             {
-                Book book = _dbContext.Book.Find(bookId);
+                Book book = _dbContext.Book.Find(bookId) ?? throw new NotFoundException($"Book {bookId} does not exist.");
                 _dbContext.Book.Remove(book);
                 _dbContext.SaveChanges();
 
@@ -106,7 +107,7 @@ namespace BookCart.DataAccess
         public List<Book> GetSimilarBooks(int bookId)
         {
             List<Book> lstBook = new List<Book>();
-            Book book = GetBookData(bookId);
+            Book book = GetBookData(bookId) ?? throw new NotFoundException($"Book {bookId} does not exist.");
 
             lstBook = _dbContext.Book.Where(x => x.Category == book.Category && x.BookId != book.BookId)
                 .OrderBy(u => Guid.NewGuid())

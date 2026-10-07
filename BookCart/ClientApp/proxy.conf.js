@@ -8,7 +8,8 @@ const PROXY_CONFIG = [
     context: [
       "/api",
       "/Upload",
-      "/swagger"
+      "/openapi",
+      "/scalar"
     ],
     target: target,
     secure: false,

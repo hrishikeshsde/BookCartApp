@@ -22,11 +22,18 @@ namespace BookCart.Errors
                 NotFoundException => (StatusCodes.Status404NotFound, "Not found"),
                 BadRequestException => (StatusCodes.Status400BadRequest, "Bad request"),
                 ConflictException => (StatusCodes.Status409Conflict, "Conflict"),
+                UpstreamException => (StatusCodes.Status502BadGateway, "A service this request depends on failed"),
+                ServiceUnavailableException => (StatusCodes.Status503ServiceUnavailable, "Service unavailable"),
                 BadHttpRequestException bad => (bad.StatusCode, "Bad request"),
                 _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred")
             };
 
-            if (status >= StatusCodes.Status500InternalServerError)
+            // A 502 is a dependency's fault and a 503 a configuration choice: worth a warning, not an error with a stack.
+            if (exception is UpstreamException or ServiceUnavailableException)
+            {
+                logger.LogWarning(exception, "{Status} for {Method} {Path}", status, httpContext.Request.Method, httpContext.Request.Path);
+            }
+            else if (status >= StatusCodes.Status500InternalServerError)
             {
                 logger.LogError(exception, "Unhandled exception for {Method} {Path}", httpContext.Request.Method, httpContext.Request.Path);
             }

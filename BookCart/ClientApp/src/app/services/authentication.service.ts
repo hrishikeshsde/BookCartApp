@@ -11,15 +11,4 @@ export class AuthenticationService {
   login(user: UserLogin) {
     return this.http.post<any>("/api/login", user);
   }
-
-  setTempUserId() {
-    if (!localStorage.getItem("userId")) {
-      const tempUserID = this.generateTempUserId();
-      localStorage.setItem("userId", tempUserID.toString());
-    }
-  }
-
-  private generateTempUserId() {
-    return Math.floor(Math.random() * (99999 - 11111 + 1) + 12345);
-  }
 }

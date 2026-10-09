@@ -59,8 +59,7 @@ namespace BookCart.Models
 
             modelBuilder.Entity<CartItems>(entity =>
             {
-                entity.HasKey(e => e.CartItemId)
-                    .HasName("PK__CartItem__488B0B0AA0297D1C");
+                entity.HasKey(e => e.CartItemId);
 
                 entity.Property(e => e.CartId)
                     .IsRequired()
@@ -70,8 +69,7 @@ namespace BookCart.Models
 
             modelBuilder.Entity<Categories>(entity =>
             {
-                entity.HasKey(e => e.CategoryId)
-                    .HasName("PK__Categori__19093A2B46B8DFC9");
+                entity.HasKey(e => e.CategoryId);
 
                 entity.Property(e => e.CategoryId).HasColumnName("CategoryID");
 
@@ -83,8 +81,7 @@ namespace BookCart.Models
 
             modelBuilder.Entity<CustomerOrderDetails>(entity =>
             {
-                entity.HasKey(e => e.OrderDetailsId)
-                    .HasName("PK__Customer__9DD74DBD81D9221B");
+                entity.HasKey(e => e.OrderDetailsId);
 
                 entity.Property(e => e.OrderId)
                     .IsRequired()
@@ -96,8 +93,7 @@ namespace BookCart.Models
 
             modelBuilder.Entity<CustomerOrders>(entity =>
             {
-                entity.HasKey(e => e.OrderId)
-                    .HasName("PK__Customer__C3905BCF96C8F1E7");
+                entity.HasKey(e => e.OrderId);
 
                 entity.Property(e => e.OrderId)
                     .HasMaxLength(20)
@@ -112,8 +108,7 @@ namespace BookCart.Models
 
             modelBuilder.Entity<UserMaster>(entity =>
             {
-                entity.HasKey(e => e.UserId)
-                    .HasName("PK__UserMast__1788CCAC2694A2ED");
+                entity.HasKey(e => e.UserId);
 
                 entity.Property(e => e.UserId).HasColumnName("UserID");
 
@@ -175,14 +170,26 @@ namespace BookCart.Models
 
             modelBuilder.Entity<WishlistItems>(entity =>
             {
-                entity.HasKey(e => e.WishlistItemId)
-                    .HasName("PK__Wishlist__171E21A16A5148A4");
+                entity.HasKey(e => e.WishlistItemId);
 
                 entity.Property(e => e.WishlistId)
                     .IsRequired()
                     .HasMaxLength(36)
                     .IsUnicode(false);
             });
+
+            // Reference data every database needs (DBScript/BookDB.txt used to insert it). Existing databases already
+            // have these rows: they adopt the migrations at the baseline, which skips this insert.
+            modelBuilder.Entity<UserType>().HasData(
+                new UserType { UserTypeId = UserTypeIds.Admin, UserTypeName = UserRoles.Admin },
+                new UserType { UserTypeId = UserTypeIds.User, UserTypeName = UserRoles.User });
+
+            modelBuilder.Entity<Categories>().HasData(
+                new Categories { CategoryId = 1, CategoryName = "Biography" },
+                new Categories { CategoryId = 2, CategoryName = "Fiction" },
+                new Categories { CategoryId = 3, CategoryName = "Mystery" },
+                new Categories { CategoryId = 4, CategoryName = "Fantasy" },
+                new Categories { CategoryId = 5, CategoryName = "Romance" });
 
             OnModelCreatingPartial(modelBuilder);
         }

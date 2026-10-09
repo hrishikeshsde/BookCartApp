@@ -1,5 +1,7 @@
 # B0 Security Phase: Technical Changes
 
+> **Superseded in part by B3** (`docs/B3_API_CHANGES.md`): `[RequireOwner]` and every `{userId}` route described below were replaced by identity taken from the token or guest cookie, and the guest cart is now merged by the server at login. The security properties are unchanged and still tested.
+
 Backend only (plus one frontend line). Tests: `BookCart.Tests`, 86 tests, run with `dotnet test BookCart.Tests -c Release` (Release only: a Debug build runs `npm install`, which fails on an `@ngrx` 19 / Angular 20 peer conflict).
 
 ## Changes by step

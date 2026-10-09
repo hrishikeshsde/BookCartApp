@@ -51,7 +51,6 @@ export class AuthEffects {
         ofType(logout),
         tap(() => {
           localStorage.clear();
-          this.authenticationService.setTempUserId();
           this.router.navigate(["/login"]);
         })
       ),
@@ -80,7 +79,6 @@ export class AuthEffects {
             user: userDetails,
           });
         } else {
-          this.authenticationService.setTempUserId();
           return loginFailure({ errorMessage: "Invalid token" });
         }
       })

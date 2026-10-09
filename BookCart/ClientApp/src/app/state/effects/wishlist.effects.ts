@@ -33,7 +33,7 @@ export class WishlistEffects {
       switchMap(([, authenticatedUser]) => {
         if (authenticatedUser) {
           return this.wishlistService
-            .getWishlistItems(authenticatedUser.userId)
+            .getWishlistItems()
             .pipe(
               map((wishlist) => loadWishlistSuccess({ wishlist })),
               catchError((error) =>
@@ -53,7 +53,7 @@ export class WishlistEffects {
       switchMap(([action, authenticatedUser]) => {
         if (authenticatedUser) {
           return this.wishlistService
-            .toggleWishlistItem(authenticatedUser.userId, action.bookId)
+            .toggleWishlistItem(action.bookId)
             .pipe(
               map((wishlist) => toggleWishlistItemSuccess({ wishlist })),
               tap(() => {
@@ -82,7 +82,7 @@ export class WishlistEffects {
       switchMap(([, authenticatedUser]) => {
         if (authenticatedUser) {
           return this.wishlistService
-            .clearWishlist(authenticatedUser.userId)
+            .clearWishlist()
             .pipe(
               map(() => clearWishlistSuccess()),
               tap(() =>

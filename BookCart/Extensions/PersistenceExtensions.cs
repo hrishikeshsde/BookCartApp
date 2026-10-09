@@ -1,5 +1,4 @@
-using BookCart.DataAccess;
-using BookCart.Interfaces;
+
 using BookCart.Models;
 using BookCart.Options;
 using BookCart.Services;
@@ -21,13 +20,23 @@ namespace BookCart.Extensions
                     sql => sql.EnableRetryOnFailure()));
 
             // Scoped, not transient: they share the request's DbContext, so one instance per request is the right lifetime.
-            services.AddScoped<IBookService, BookDataAccessLayer>();
-            services.AddScoped<ICartService, CartDataAccessLayer>();
-            services.AddScoped<IOrderService, OrderDataAccessLayer>();
-            services.AddScoped<IUserService, UserDataAccessLayer>();
-            services.AddScoped<IWishlistService, WishlistDataAccessLayer>();
+            services.AddScoped<IBookService, BookService>();
+            services.AddScoped<ICartService, CartService>();
+            services.AddScoped<IOrderService, OrderService>();
+            services.AddScoped<IUserService, UserService>();
+            services.AddScoped<IWishlistService, WishlistService>();
 
-            services.AddSingleton<CoverStorage>();
+            services.AddSingleton<ICoverStorage, CoverStorage>();
+            services.AddSingleton(TimeProvider.System);
+
+            // Book summaries: a typed client for the AI service, and a cache so each book is summarised once per period.
+            services.AddMemoryCache();
+            services.AddHttpClient<IBookSummaryService, GeminiBookSummaryService>((provider, client) =>
+            {
+                var gemini = provider.GetRequiredService<IOptions<GeminiOptions>>().Value;
+                client.BaseAddress = new Uri(gemini.BaseUrl);
+                client.Timeout = TimeSpan.FromSeconds(gemini.TimeoutSeconds);
+            });
             return services;
         }
     }

@@ -52,6 +52,31 @@ namespace BookCart.Options
         /// <summary>Signup username checks allowed per client per minute.</summary>
         [Range(1, 100_000)]
         public int LookupPermitLimit { get; init; } = 30;
+
+        /// <summary>Book summary requests allowed per client per minute (each uncached one costs a paid AI call).</summary>
+        [Range(1, 100_000)]
+        public int SummaryPermitLimit { get; init; } = 5;
+    }
+
+    /// <summary>The AI service behind book summaries. Optional: without an ApiKey the feature answers 503.</summary>
+    public sealed class GeminiOptions
+    {
+        public const string Section = "Gemini";
+
+        /// <summary>Set it with user-secrets or the Gemini__ApiKey environment variable, never in a file that is committed.</summary>
+        public string ApiKey { get; init; } = "";
+
+        public string Model { get; init; } = "gemini-2.0-flash";
+
+        [Required, Url]
+        public string BaseUrl { get; init; } = "https://generativelanguage.googleapis.com/";
+
+        /// <summary>How long a generated summary is reused. Summaries of a book hardly change, and each one costs money.</summary>
+        [Range(1, 365)]
+        public int CacheDays { get; init; } = 7;
+
+        [Range(1, 120)]
+        public int TimeoutSeconds { get; init; } = 20;
     }
 
     public sealed class SecurityOptions

@@ -20,6 +20,7 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public const string AdminPassword = "Admin-pass-1";
     public const int AuthPermitLimit = 5;
     public const int LookupPermitLimit = 8;
+    public const int SummaryPermitLimit = 3;
 
     /// <summary>
     /// Everything the tests write lives here and is deleted afterwards. The web root sits three levels down, so even
@@ -54,7 +55,8 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
             // Low enough to test the limiters cheaply. Every test client has its own IP (see ConfigureClient), so
             // ordinary tests never come near these limits.
             ["RateLimiting:AuthPermitLimit"] = AuthPermitLimit.ToString(),
-            ["RateLimiting:LookupPermitLimit"] = LookupPermitLimit.ToString()
+            ["RateLimiting:LookupPermitLimit"] = LookupPermitLimit.ToString(),
+            ["RateLimiting:SummaryPermitLimit"] = SummaryPermitLimit.ToString()
         };
 
         // UseSetting feeds host configuration, which the eager startup checks in Program.cs can see.
@@ -83,7 +85,7 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         var username = "u" + Guid.NewGuid().ToString("N")[..12];
         const string password = "Fresh-pass-1";
         await using var db = CreateDbContext();
-        var userTypeId = await db.UserType.Where(t => t.UserTypeName == "User").Select(t => t.UserTypeId).SingleAsync();
+        var userTypeId = UserTypeIds.User;
         var user = NewUser(username, password, userTypeId);
         db.UserMaster.Add(user);
         await db.SaveChangesAsync();
@@ -97,17 +99,13 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     {
         await using var db = CreateDbContext();
         await db.Database.EnsureDeletedAsync();
-        await db.Database.EnsureCreatedAsync();
+        // The database is built by the real migrations (not from the model), so every test run also proves they work
+        // on an empty database. They seed the user types and categories.
+        await db.Database.MigrateAsync();
 
-        var admin = new UserType { UserTypeName = "Admin" };
-        var user = new UserType { UserTypeName = "User" };
-        db.UserType.AddRange(admin, user);
-        db.Categories.Add(new Categories { CategoryName = "Fiction" });
-        await db.SaveChangesAsync();
-
-        var a = NewUser("usera", UserAPassword, user.UserTypeId);
-        var b = NewUser("userb", UserBPassword, user.UserTypeId);
-        var adminUser = NewUser("adminuser", AdminPassword, admin.UserTypeId);
+        var a = NewUser("usera", UserAPassword, UserTypeIds.User);
+        var b = NewUser("userb", UserBPassword, UserTypeIds.User);
+        var adminUser = NewUser("adminuser", AdminPassword, UserTypeIds.Admin);
         var book = new Book { Title = "Test Book", Author = "Test Author", Category = "Fiction", Price = BookPrice, CoverFileName = "Default_image.jpg" };
         db.UserMaster.AddRange(a, b, adminUser);
         db.Book.Add(book);

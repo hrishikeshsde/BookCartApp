@@ -3,6 +3,7 @@ using BookCart.Models;
 using BookCart.Options;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
 using System.Threading.RateLimiting;
@@ -86,6 +87,8 @@ namespace BookCart.Extensions
                 limiter.AddPolicy("auth", context => RateLimitPartition.GetFixedWindowLimiter(Client(context), _ => PerMinute(config.Value.AuthPermitLimit)));
                 // The signup form checks the username while typing, so this one is more generous.
                 limiter.AddPolicy("lookup", context => RateLimitPartition.GetFixedWindowLimiter(Client(context), _ => PerMinute(config.Value.LookupPermitLimit)));
+                // Every uncached summary is a paid call to an AI service.
+                limiter.AddPolicy("summary", context => RateLimitPartition.GetFixedWindowLimiter(Client(context), _ => PerMinute(config.Value.SummaryPermitLimit)));
             });
 
             // The book and category lists are public and change rarely; admin writes evict the "catalog" tag.
@@ -93,7 +96,10 @@ namespace BookCart.Extensions
                 options.AddPolicy(CatalogCachePolicy, policy => policy.Expire(TimeSpan.FromMinutes(5)).Tag(CatalogCachePolicy)));
 
             services.AddResponseCompression();
-            services.AddHealthChecks().AddDbContextCheck<BookDBContext>();
+            // Unhealthy when the database cannot be reached, or when it is behind the migrations this version of the app expects
+            // (it relies on the unique indexes and constraints they add): deploying onto an unmigrated database shows up here.
+            services.AddHealthChecks().AddDbContextCheck<BookDBContext>(
+                customTestQuery: async (db, cancellationToken) => !(await db.Database.GetPendingMigrationsAsync(cancellationToken)).Any());
             return services;
         }
 

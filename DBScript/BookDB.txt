@@ -1,6 +1,15 @@
-Scaffold-DbContext "Your connection string" Microsoft.EntityFrameworkCore.SqlServer -OutputDir Models -Tables Categories, UserType, UserMaster, Book, Cart, CartItems, CustomerOrders, CustomerOrderDetails, Wishlist, WishlistItems -force
+-- LEGACY: the database schema is now defined by the EF Core migrations in BookCart/Migrations.
+--
+--   * New database:       create an empty database, then   dotnet ef database update --project BookCart
+--                         (set BOOKCART_EF_CONNECTION to the connection string). It also inserts the user types and categories.
+--   * Existing database: (created from this script) back it up, run DBScript/B4_adopt_migrations.sql once, then apply the
+--                         migrations. See docs/B4_DATABASE_CHANGES.md.
+--
+-- This script is kept because it is exactly how every existing database was created. The upgrade tests
+-- (BookCart.Tests/ExistingDatabaseTests.cs) run it to prove that such a database ends up identical to a new one.
+-- Do not edit it: change the model and add a migration instead (dotnet ef migrations add <Name> --project BookCart).
+-- The first line used to be a Scaffold-DbContext command; the model is now maintained by hand.
 
----------------------------------------------------------------------------------------
 CREATE TABLE Categories (  
 CategoryID int IDENTITY(1,1) PRIMARY KEY,  
 CategoryName varchar(20) NOT NULL   

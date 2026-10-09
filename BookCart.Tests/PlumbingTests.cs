@@ -88,7 +88,7 @@ public class PlumbingTests(ApiFactory factory)
     [InlineData("/api/nope")]
     [InlineData("/api")]
     [InlineData("/api/book/abc")]               // {id:int}
-    [InlineData("/api/shoppingcart/abc")]       // {userId:int}
+    [InlineData("/api/shoppingcart/abc")]       // not a route: the id is no longer in the URL
     public async Task Unknown_api_routes_are_404_problems(string path)
     {
         var response = await _factory.CreateClient().GetAsync(path);
@@ -100,7 +100,7 @@ public class PlumbingTests(ApiFactory factory)
     [Fact]
     public async Task Bodiless_error_statuses_get_a_problem_body_too()
     {
-        var unauthorized = await _factory.CreateClient().GetAsync($"/api/order/{_factory.UserAId}");
+        var unauthorized = await _factory.CreateClient().GetAsync("/api/order");
 
         Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
         Assert.Equal("application/problem+json", unauthorized.Content.Headers.ContentType?.MediaType);
@@ -169,6 +169,35 @@ public class PlumbingTests(ApiFactory factory)
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
         Assert.Equal("Unhealthy", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Health_check_reports_a_database_that_is_behind_the_migrations_as_unhealthy()
+    {
+        // This version of the app relies on the constraints the migrations add: an unmigrated database must not look healthy.
+        var behind = TestDb.Scratch("PendingMigrations");
+        await TestDb.DropAsync(behind);
+        try
+        {
+            await using (var db = TestDb.Context(behind))
+            {
+                var baseline = db.Database.GetMigrations().Single(m => m.EndsWith("_Baseline"));
+                await Microsoft.EntityFrameworkCore.Infrastructure.AccessorExtensions.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>(db).MigrateAsync(baseline);
+            }
+            var host = _factory.WithWebHostBuilder(b => Config(("ConnectionStrings:DefaultConnection", behind))(b));
+
+            var response = await host.CreateClient().GetAsync("/health");
+
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+            Assert.Equal("Unhealthy", await response.Content.ReadAsStringAsync());
+
+            await using (var db = TestDb.Context(behind)) await db.Database.MigrateAsync();      // apply the rest...
+            Assert.Equal(HttpStatusCode.OK, (await host.CreateClient().GetAsync("/health")).StatusCode);   // ...and it is healthy
+        }
+        finally
+        {
+            await TestDb.DropAsync(behind);
+        }
     }
 
     // ---- compression and caching -------------------------------------------------------------------------------
@@ -266,9 +295,12 @@ public class PlumbingTests(ApiFactory factory)
         Assert.False(Secured("/api/Book", "get"));
         Assert.False(Secured("/api/User", "post"));
         Assert.True(Secured("/api/Book", "post"));                  // admin only
-        Assert.True(Secured("/api/Order/{userId}", "get"));
-        Assert.True(Secured("/api/Wishlist/{userId}", "get"));
-        Assert.True(Secured("/api/CheckOut/{userId}", "post"));
+        Assert.True(Secured("/api/Order", "get"));
+        Assert.True(Secured("/api/Wishlist", "get"));
+        Assert.True(Secured("/api/CheckOut", "post"));
+        Assert.False(Secured("/api/ShoppingCart", "get"));         // guests have carts
+        Assert.False(Secured("/api/ShoppingCart/items/{bookId}", "post"));
+        Assert.False(Secured("/api/Book/{id}/summary", "post"));
     }
 
     // ---- logging -----------------------------------------------------------------------------------------------
@@ -310,6 +342,7 @@ public class PlumbingTests(ApiFactory factory)
 
     static MultipartFormDataContent Form(string title) => new()
     {
-        { new StringContent(JsonSerializer.Serialize(new { bookId = 0, title, author = "A", category = "Fiction", price = "5" })), "bookFormData" }
+        { new StringContent(title), "title" }, { new StringContent("A"), "author" },
+        { new StringContent("Fiction"), "category" }, { new StringContent("5"), "price" }
     };
 }

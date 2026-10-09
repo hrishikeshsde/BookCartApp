@@ -2,41 +2,36 @@ import { HttpClient } from "@angular/common/http";
 import { inject, Injectable } from "@angular/core";
 import { ShoppingCart } from "../models/shoppingcart";
 
+/**
+ * The server decides whose cart this is: the signed-in user's, or else the anonymous visitor's (identified by a cookie
+ * the server sets when the first book is added). There is no user id in any URL.
+ */
 @Injectable({
   providedIn: "root",
 })
 export class CartService {
   private readonly http = inject(HttpClient);
-  private readonly baseURL = "/api/shoppingcart/";
+  private readonly baseURL = "/api/shoppingcart";
 
-  addBookToCart(userId: number, bookId: number) {
-    return this.http.post<ShoppingCart[]>(
-      this.baseURL + `addToCart/${userId}/${bookId}`,
-      {}
-    );
+  getCartItems() {
+    return this.http.get<ShoppingCart[]>(this.baseURL);
   }
 
-  getCartItems(userId: number) {
-    return this.http.get<ShoppingCart[]>(this.baseURL + userId);
+  addBookToCart(bookId: number) {
+    return this.http.post<ShoppingCart[]>(`${this.baseURL}/items/${bookId}`, {});
   }
 
   // Delete a single item from the cart
-  removeBookFromCart(userId: number, bookId: number) {
-    return this.http.delete<ShoppingCart[]>(
-      this.baseURL + `${userId}/${bookId}`,
-      {}
-    );
+  removeBookFromCart(bookId: number) {
+    return this.http.delete<ShoppingCart[]>(`${this.baseURL}/items/${bookId}`);
   }
 
   // Reduces the quantity by one for an item in shopping cart
-  reduceCartQuantity(userId: number, bookId: number) {
-    return this.http.put<ShoppingCart[]>(
-      this.baseURL + `${userId}/${bookId}`,
-      {}
-    );
+  reduceCartQuantity(bookId: number) {
+    return this.http.patch<ShoppingCart[]>(`${this.baseURL}/items/${bookId}`, {});
   }
 
-  clearCart(userId: number) {
-    return this.http.delete<number>(this.baseURL + `${userId}`, {});
+  clearCart() {
+    return this.http.delete<void>(this.baseURL);
   }
 }

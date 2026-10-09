@@ -99,7 +99,7 @@ public class HardeningTests(ApiFactory factory)
 
     [Theory]
     [InlineData("/api/book")]
-    [InlineData("/api/shoppingcart/1")]      // an error response (401)
+    [InlineData("/api/order")]                // an error response (401)
     [InlineData("/does/not/exist.js")]       // a not-found response
     public async Task Every_response_carries_the_security_headers(string path)
     {
@@ -266,7 +266,7 @@ public class HardeningTests(ApiFactory factory)
     {
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        return (await client.GetAsync($"/api/order/{_factory.UserAId}")).StatusCode;
+        return (await client.GetAsync("/api/order")).StatusCode;
     }
 
     string MintToken(int userId, DateTime notBefore, DateTime expires, string issuer = TestIssuer, string audience = TestIssuer, string key = TestKey)

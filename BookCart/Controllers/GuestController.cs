@@ -1,41 +1,24 @@
 using BookCart.Services;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Cryptography;
 
 namespace BookCart.Controllers
 {
+    [ApiController]
     [Route("api/[controller]")]
-    public class GuestController(ICurrentUser currentUser, IDataProtectionProvider dataProtection) : ControllerBase
+    public class GuestController(IGuestSession guestSession) : ControllerBase
     {
-        readonly ICurrentUser _currentUser = currentUser;
-        readonly IDataProtector _protector = dataProtection.CreateProtector(GuestCart.ProtectorPurpose);
+        readonly IGuestSession _guestSession = guestSession;
 
         /// <summary>
-        /// Get (or start) an anonymous guest session for a shopping cart. The server picks an unguessable id and
-        /// remembers it in a tamper-proof HttpOnly cookie; only the holder of that cookie can use the id.
-        /// Calling it again with a valid cookie returns the same id.
+        /// Start (or continue) an anonymous guest session for a shopping cart. The server picks an unguessable id and
+        /// remembers it in a tamper-proof HttpOnly cookie. Clients rarely need this: adding the first book to the cart
+        /// starts the session by itself. Calling it again with a valid cookie returns the same id.
         /// </summary>
-        /// <returns>The guest id to use as the <c>userId</c> of cart endpoints</returns>
+        /// <returns>The guest id</returns>
         [AllowAnonymous]
         [HttpPost]
-        public IActionResult Create()
-        {
-            var guestId = _currentUser.GuestId;
-            if (guestId is null)
-            {
-                guestId = RandomNumberGenerator.GetInt32(GuestCart.MinId, int.MaxValue);
-                Response.Cookies.Append(GuestCart.CookieName, _protector.Protect(guestId.Value.ToString()), new CookieOptions
-                {
-                    HttpOnly = true,
-                    Secure = Request.IsHttps,
-                    SameSite = SameSiteMode.Lax,
-                    MaxAge = TimeSpan.FromDays(30),
-                    IsEssential = true
-                });
-            }
-            return Ok(new { guestId });
-        }
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public IActionResult Create() => Ok(new { guestId = _guestSession.StartOrContinue() });
     }
 }

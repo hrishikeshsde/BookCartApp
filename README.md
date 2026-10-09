@@ -2,10 +2,6 @@
 
 An e-commerce application for an online book store created with .NET and Angular 18, using SQL Server as database.
 
-# Google Gemini integration
-
-https://github.com/AnkitSharma-007/BookCart/assets/33789321/f2ee777e-24b8-48ba-93c7-638cdbab25a6
-
 # Concepts Covered
 
 ### .NET
@@ -31,26 +27,26 @@ https://github.com/AnkitSharma-007/BookCart/assets/33789321/f2ee777e-24b8-48ba-9
 # Prerequisites
 - Visual Studio 2022 
 - SQL Server 
-- .NET Core 8.0 SDK or above
-- Node.Js V18.0 or above
+- .NET 10 SDK (pinned in global.json)
+- Node.js 22 or newer for the Angular app
 
 # Steps to run the app
 1. Clone the Repo
-2. Scaffold the database using the [DBScript](https://github.com/AnkitSharma-007/BookCart/blob/master/DBScript/BookDB.txt)
-3. Put your own connection string in [appsettings.json](https://github.com/AnkitSharma-007/BookCart/blob/master/BookCart/appsettings.json) file.
-4. Build and launch the application from Visual Studio.
+2. Create an empty SQL Server database, then create its tables and reference data with the EF Core migrations:
+   `dotnet tool restore`, then `BOOKCART_EF_CONNECTION="<your connection string>" dotnet ef database update --project BookCart`.
+   (An existing database created from the old DBScript needs the upgrade steps in [docs/B4_DATABASE_CHANGES.md](docs/B4_DATABASE_CHANGES.md).)
+3. Set your secrets with [user-secrets](https://learn.microsoft.com/aspnet/core/security/app-secrets) from the `BookCart` folder:
+   `dotnet user-secrets set "ConnectionStrings:DefaultConnection" "<your connection string>"` and
+   `dotnet user-secrets set "Jwt:SecretKey" "<a random string of at least 32 characters>"`.
+   Optional, for AI book summaries: `dotnet user-secrets set "Gemini:ApiKey" "<your key>"`.
+4. Install the Angular app's packages once: `npm ci --legacy-peer-deps` in `BookCart/ClientApp` (the plain `npm install` that a Debug build runs
+   currently fails on an `@ngrx` / Angular version conflict, which the planned Angular upgrade resolves).
+   Then run `dotnet run --launch-profile BookCart` from the `BookCart` folder (or launch from Visual Studio).
+5. Register a user in the app, then make them an admin: `UPDATE UserMaster SET UserTypeID = 1 WHERE Username = '<username>'`.
 
 # Live Demo
 [https://bookcart.azurewebsites.net/](https://bookcart.azurewebsites.net/)
 
 # License
-[MIT](https://github.com/AnkitSharma-007/BookCart/blob/master/LICENSE)
-
-# See Also
-
-- https://github.com/AnkitSharma-007/MovieApp
-- https://github.com/AnkitSharma-007/blogging-app-with-Angular-CloudFirestore
-- https://github.com/AnkitSharma-007/angular-graphql
-- https://github.com/AnkitSharma-007/angular-forms-validation
-- https://github.com/AnkitSharma-007/Smart-Angular-App-Using-Azure-Cognitive-Services
+[MIT](https://github.com/hrishikeshsde/BookCartApp/blob/master/LICENSE)
 

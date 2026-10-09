@@ -39,6 +39,13 @@ namespace BookCart.Options
         /// <summary>The cover used for books without an uploaded image. It is never deleted.</summary>
         [Required]
         public string DefaultCoverImageFile { get; init; } = "";
+
+        /// <summary>
+        /// Where uploaded covers are stored and served from (as <c>/Upload/...</c>). Unset: <c>wwwroot/Upload</c> inside the
+        /// application. In a container, point it at a mounted volume (writable by the app's user), or every redeploy
+        /// loses the uploads. The default cover is always served from <c>wwwroot/Upload</c>, so the folder can start empty.
+        /// </summary>
+        public string? UploadFolder { get; init; }
     }
 
     public sealed class RateLimitingOptions
@@ -85,5 +92,12 @@ namespace BookCart.Options
 
         /// <summary>False: the Content-Security-Policy is sent report-only (violations are logged by the browser, nothing is blocked).</summary>
         public bool EnforceCsp { get; init; }
+
+        /// <summary>
+        /// A folder (on a volume that survives restarts) where the keys that encrypt the guest cookie are kept. Unset, the
+        /// framework's per-machine default is used, which in a container is lost on every restart: every guest then loses
+        /// their cart. Needed too when several instances run behind a load balancer: they must share the same folder.
+        /// </summary>
+        public string? DataProtectionKeysPath { get; init; }
     }
 }

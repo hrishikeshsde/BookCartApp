@@ -32,8 +32,8 @@ namespace BookCart.Services
         // Number of leading bytes needed to recognise every allowed type (WebP: "RIFF" + size + "WEBP").
         const int HeaderLength = 12;
 
-        readonly string _uploadFolder = Path.Combine(
-            environment.WebRootPath ?? Path.Combine(environment.ContentRootPath, "wwwroot"), "Upload");
+        readonly string _uploadFolder = options.Value.UploadFolder
+            ?? Path.Combine(environment.WebRootPath ?? Path.Combine(environment.ContentRootPath, "wwwroot"), "Upload");
 
         /// <summary>The cover used when a book has no uploaded image. It is never deleted.</summary>
         public string DefaultFileName { get; } = options.Value.DefaultCoverImageFile;

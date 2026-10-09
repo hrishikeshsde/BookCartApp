@@ -20,6 +20,8 @@ const certFilePath = path.join(baseFolder, `${certificateName}.pem`);
 const keyFilePath = path.join(baseFolder, `${certificateName}.key`);
 
 if (!fs.existsSync(certFilePath) || !fs.existsSync(keyFilePath)) {
+  // dotnet dev-certs does not create the folder, so a fresh machine failed here.
+  fs.mkdirSync(baseFolder, { recursive: true });
   spawn('dotnet', [
     'dev-certs',
     'https',

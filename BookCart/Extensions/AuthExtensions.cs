@@ -3,6 +3,8 @@ using BookCart.Options;
 using BookCart.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
+using Microsoft.AspNetCore.DataProtection.Repositories;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -33,6 +35,15 @@ namespace BookCart.Extensions
             // The signed-in user (from the JWT) or an anonymous guest (from the tamper-proof guest cookie).
             services.AddHttpContextAccessor();
             services.AddDataProtection();
+            // Optionally keep the encryption keys on a volume that survives restarts (see SecurityOptions.DataProtectionKeysPath).
+            services.AddOptions<KeyManagementOptions>().Configure<IOptions<SecurityOptions>, ILoggerFactory>((keys, security, loggerFactory) =>
+            {
+                if (security.Value.DataProtectionKeysPath is { Length: > 0 } path)
+                {
+                    Directory.CreateDirectory(path);
+                    keys.XmlRepository = new FileSystemXmlRepository(new DirectoryInfo(path), loggerFactory);
+                }
+            });
             services.AddScoped<IGuestSession, GuestSession>();
             services.AddScoped<ICurrentUser, CurrentUser>();
             services.AddSingleton<ITokenService, TokenService>();

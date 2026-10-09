@@ -1,0 +1,36 @@
+# Top-most EditorConfig file. Kept small on purpose: it records the style the code already follows, so
+# `dotnet format --verify-no-changes` is a meaningful check, not a rewrite of the repository.
+root = true
+
+[*]
+indent_style = space
+insert_final_newline = true
+
+[*.{cs,csx}]
+indent_size = 4
+
+[*.{csproj,props,targets,slnx,json,yml,yaml,xml,config}]
+indent_size = 2
+
+[*.{ts,html,scss,css}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.cs]
+# Types and members
+dotnet_style_qualification_for_field = false:suggestion
+dotnet_style_qualification_for_property = false:suggestion
+dotnet_style_qualification_for_method = false:suggestion
+csharp_style_var_for_built_in_types = true:silent
+csharp_style_var_when_type_is_apparent = true:silent
+# Both namespace forms exist today; do not enforce a rewrite
+csharp_style_namespace_declarations = file_scoped:silent
+
+csharp_indent_case_contents = true
+
+# Several initializers on one line are used on purpose for short test fixtures
+csharp_new_line_before_members_in_object_initializers = false
+csharp_new_line_before_members_in_anonymous_types = false
+csharp_new_line_between_query_expression_clauses = false

@@ -1,5 +1,6 @@
 using BookCart.Options;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
 using Scalar.AspNetCore;
 
@@ -58,6 +59,17 @@ namespace BookCart.Extensions
 
             app.UseHttpsRedirection();
             app.UseResponseCompression();
+            // Covers may live outside the application folder (a mounted volume). They are served from there first; anything
+            // not found there, such as the default cover, falls through to the application's own wwwroot.
+            if (app.Services.GetRequiredService<IOptions<StorageOptions>>().Value.UploadFolder is { Length: > 0 } uploadFolder)
+            {
+                Directory.CreateDirectory(uploadFolder);
+                app.UseStaticFiles(new StaticFileOptions
+                {
+                    FileProvider = new PhysicalFileProvider(uploadFolder),
+                    RequestPath = "/Upload"
+                });
+            }
             app.UseStaticFiles();
             app.UseRouting();
             app.UseRateLimiter();        // after routing: [EnableRateLimiting] is endpoint metadata

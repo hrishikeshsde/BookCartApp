@@ -1,7 +1,5 @@
 import { inject, Injectable } from "@angular/core";
 import { Actions, createEffect, ofType } from "@ngrx/effects";
-import { concatLatestFrom } from "@ngrx/operators";
-import { Store } from "@ngrx/store";
 import { catchError, map, of, switchMap, tap } from "rxjs";
 import { CartService } from "src/app/services/cart.service";
 import { SnackbarService } from "src/app/services/snackbar.service";
@@ -23,120 +21,91 @@ import {
   removeCartItemFailure,
   removeCartItemSuccess,
 } from "../actions/cart.actions";
-import { selectCurrentUserId } from "../selectors/auth.selectors";
 
+/**
+ * None of these calls names a user: the server works out whose cart it is from the login token, or else from the
+ * cookie it gave the visitor when the first book was added.
+ */
 @Injectable()
 export class CartEffects {
   private readonly actions$ = inject(Actions);
   private readonly cartService = inject(CartService);
-  private readonly store = inject(Store);
   private readonly snackbarService = inject(SnackbarService);
 
   loadCart$ = createEffect(() =>
     this.actions$.pipe(
+      // setAuthState: logging in merges the guest cart into the user's on the server, so load what it ended up as.
       ofType(loadCart, setAuthState),
-      concatLatestFrom(() => this.store.select(selectCurrentUserId)),
-      switchMap(([, currentUserId]) => {
-        if (currentUserId) {
-          return this.cartService.getCartItems(Number(currentUserId)).pipe(
-            map((shoppingCart) => loadCartSuccess({ shoppingCart })),
-            catchError((error) => of(loadCartFailure({ errorMessage: error })))
-          );
-        }
-        return of(loadCartFailure({ errorMessage: "User not found" }));
-      })
+      switchMap(() =>
+        this.cartService.getCartItems().pipe(
+          map((shoppingCart) => loadCartSuccess({ shoppingCart })),
+          catchError((error) => of(loadCartFailure({ errorMessage: error })))
+        )
+      )
     )
   );
 
   addToCart$ = createEffect(() =>
     this.actions$.pipe(
       ofType(addToCart),
-      concatLatestFrom(() => this.store.select(selectCurrentUserId)),
-      switchMap(([action, currentUserId]) => {
-        if (currentUserId) {
-          return this.cartService
-            .addBookToCart(Number(currentUserId), action.bookId)
-            .pipe(
-              map((shoppingCart) => addToCartSuccess({ shoppingCart })),
-              tap(() => {
-                this.snackbarService.showSnackBar("One Item added to cart");
-              }),
-              catchError((error) =>
-                of(addToCartFailure({ errorMessage: error }))
-              )
-            );
-        }
-        return of(addToCartFailure({ errorMessage: "User not found" }));
-      })
+      switchMap((action) =>
+        this.cartService.addBookToCart(action.bookId).pipe(
+          map((shoppingCart) => addToCartSuccess({ shoppingCart })),
+          tap(() => {
+            this.snackbarService.showSnackBar("One Item added to cart");
+          }),
+          catchError((error) => of(addToCartFailure({ errorMessage: error })))
+        )
+      )
     )
   );
 
   removeCartItem$ = createEffect(() =>
     this.actions$.pipe(
       ofType(removeCartItem),
-      concatLatestFrom(() => this.store.select(selectCurrentUserId)),
-      switchMap(([action, currentUserId]) => {
-        if (currentUserId) {
-          return this.cartService
-            .removeBookFromCart(Number(currentUserId), action.bookId)
-            .pipe(
-              map((shoppingCart) => removeCartItemSuccess({ shoppingCart })),
-              tap(() => {
-                this.snackbarService.showSnackBar("Book removed from cart");
-              }),
-              catchError((error) =>
-                of(removeCartItemFailure({ errorMessage: error }))
-              )
-            );
-        }
-        return of(removeCartItemFailure({ errorMessage: "User not found" }));
-      })
+      switchMap((action) =>
+        this.cartService.removeBookFromCart(action.bookId).pipe(
+          map((shoppingCart) => removeCartItemSuccess({ shoppingCart })),
+          tap(() => {
+            this.snackbarService.showSnackBar("Book removed from cart");
+          }),
+          catchError((error) =>
+            of(removeCartItemFailure({ errorMessage: error }))
+          )
+        )
+      )
     )
   );
 
   reduceCartQuantity$ = createEffect(() =>
     this.actions$.pipe(
       ofType(reduceCartQuantity),
-      concatLatestFrom(() => this.store.select(selectCurrentUserId)),
-      switchMap(([action, currentUserId]) => {
-        if (currentUserId) {
-          return this.cartService
-            .reduceCartQuantity(Number(currentUserId), action.bookId)
-            .pipe(
-              map((shoppingCart) =>
-                reduceCartQuantitySuccess({ shoppingCart })
-              ),
-              tap(() => {
-                this.snackbarService.showSnackBar("One item removed from cart");
-              }),
-              catchError((error) =>
-                of(reduceCartQuantityFailure({ errorMessage: error }))
-              )
-            );
-        }
-        return of(
-          reduceCartQuantityFailure({ errorMessage: "User not found" })
-        );
-      })
+      switchMap((action) =>
+        this.cartService.reduceCartQuantity(action.bookId).pipe(
+          map((shoppingCart) => reduceCartQuantitySuccess({ shoppingCart })),
+          tap(() => {
+            this.snackbarService.showSnackBar("One item removed from cart");
+          }),
+          catchError((error) =>
+            of(reduceCartQuantityFailure({ errorMessage: error }))
+          )
+        )
+      )
     )
   );
 
   clearCart$ = createEffect(() =>
     this.actions$.pipe(
       ofType(clearCart),
-      concatLatestFrom(() => this.store.select(selectCurrentUserId)),
-      switchMap(([, currentUserId]) => {
-        if (currentUserId) {
-          return this.cartService.clearCart(Number(currentUserId)).pipe(
-            map(() => clearCartSuccess()),
-            tap(() => {
-              this.snackbarService.showSnackBar("Cart cleared");
-            }),
-            catchError((error) => of(clearCartFailure({ errorMessage: error })))
-          );
-        }
-        return of(clearCartFailure({ errorMessage: "User not found" }));
-      })
+      switchMap(() =>
+        this.cartService.clearCart().pipe(
+          map(() => clearCartSuccess()),
+          tap(() => {
+            this.snackbarService.showSnackBar("Cart cleared");
+          }),
+          catchError((error) => of(clearCartFailure({ errorMessage: error })))
+        )
+      )
     )
   );
 }

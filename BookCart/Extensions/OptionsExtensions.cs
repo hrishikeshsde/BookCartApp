@@ -11,6 +11,7 @@ namespace BookCart.Extensions
             services.AddOptions<DatabaseOptions>().BindConfiguration(DatabaseOptions.Section).ValidateDataAnnotations().ValidateOnStart();
             services.AddOptions<StorageOptions>().BindConfiguration(StorageOptions.Section).ValidateDataAnnotations().ValidateOnStart();
             services.AddOptions<RateLimitingOptions>().BindConfiguration(RateLimitingOptions.Section).ValidateDataAnnotations().ValidateOnStart();
+            services.AddOptions<GeminiOptions>().BindConfiguration(GeminiOptions.Section).ValidateDataAnnotations().ValidateOnStart();
             services.AddOptions<SecurityOptions>().BindConfiguration(SecurityOptions.Section).ValidateOnStart();
             return services;
         }

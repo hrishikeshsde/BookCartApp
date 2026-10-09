@@ -2,25 +2,23 @@ import { HttpClient } from "@angular/common/http";
 import { inject, Injectable } from "@angular/core";
 import { Book } from "../models/book";
 
+/** The signed-in user's wishlist. The server knows who that is from the token, so there is no user id in any URL. */
 @Injectable({
   providedIn: "root",
 })
 export class WishlistService {
   private readonly http = inject(HttpClient);
-  private readonly baseURL = "/api/Wishlist/";
+  private readonly baseURL = "/api/wishlist";
 
-  toggleWishlistItem(userId: number, bookId: number) {
-    return this.http.post<Book[]>(
-      this.baseURL + `ToggleWishlist/${userId}/${bookId}`,
-      {}
-    );
+  toggleWishlistItem(bookId: number) {
+    return this.http.post<Book[]>(`${this.baseURL}/items/${bookId}`, {});
   }
 
-  getWishlistItems(userId: number) {
-    return this.http.get<Book[]>(this.baseURL + userId);
+  getWishlistItems() {
+    return this.http.get<Book[]>(this.baseURL);
   }
 
-  clearWishlist(userId: number) {
-    return this.http.delete<number>(this.baseURL + `${userId}`);
+  clearWishlist() {
+    return this.http.delete<void>(this.baseURL);
   }
 }

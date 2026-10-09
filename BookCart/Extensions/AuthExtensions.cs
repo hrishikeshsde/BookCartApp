@@ -33,7 +33,9 @@ namespace BookCart.Extensions
             // The signed-in user (from the JWT) or an anonymous guest (from the tamper-proof guest cookie).
             services.AddHttpContextAccessor();
             services.AddDataProtection();
+            services.AddScoped<IGuestSession, GuestSession>();
             services.AddScoped<ICurrentUser, CurrentUser>();
+            services.AddSingleton<ITokenService, TokenService>();
             return services;
         }
 

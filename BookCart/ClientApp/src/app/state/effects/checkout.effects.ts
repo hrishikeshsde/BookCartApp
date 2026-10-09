@@ -1,19 +1,16 @@
 import { inject, Injectable } from "@angular/core";
 import { Router } from "@angular/router";
 import { Actions, createEffect, ofType } from "@ngrx/effects";
-import { concatLatestFrom } from "@ngrx/operators";
 import { Store } from "@ngrx/store";
-import { catchError, delay, map, of, switchMap, tap } from "rxjs";
+import { catchError, map, of, switchMap, tap } from "rxjs";
 import { SnackbarService } from "src/app/services/snackbar.service";
 import { CheckoutService } from "../../services/checkout.service";
-import { clearCart } from "../actions/cart.actions";
+import { loadCart } from "../actions/cart.actions";
 import {
   placeOrder,
   placeOrderFailure,
   placeOrderSuccess,
 } from "../actions/checkout.actions";
-import { selectAuthenticatedUser } from "../selectors/auth.selectors";
-import { selectCartItems } from "../selectors/cart.selectors";
 
 @Injectable()
 export class CheckoutEffects {
@@ -26,22 +23,12 @@ export class CheckoutEffects {
   placeOrder$ = createEffect(() =>
     this.actions$.pipe(
       ofType(placeOrder),
-      concatLatestFrom(() => [
-        this.store.select(selectAuthenticatedUser),
-        this.store.select(selectCartItems),
-      ]),
-      switchMap(([action, authenticatedUser, cartItems]) =>
-        this.checkoutService
-          .placeOrder(authenticatedUser.userId, {
-            orderDetails: cartItems,
-            cartTotal: action.totalPrice,
-          })
-          .pipe(
-            map(() => placeOrderSuccess()),
-            catchError((error) =>
-              of(placeOrderFailure({ errorMessage: error }))
-            )
-          )
+      // The server orders what is in its copy of the cart at its prices; nothing about the order is sent.
+      switchMap(() =>
+        this.checkoutService.placeOrder().pipe(
+          map(() => placeOrderSuccess()),
+          catchError((error) => of(placeOrderFailure({ errorMessage: error })))
+        )
       )
     )
   );
@@ -53,7 +40,22 @@ export class CheckoutEffects {
         tap(() => {
           this.snackbarService.showSnackBar("Order placed successfully!!!");
           this.router.navigate(["/myorders"]);
-          this.store.dispatch(clearCart());
+          // The server emptied the cart as part of placing the order; show that.
+          this.store.dispatch(loadCart());
+        })
+      ),
+    { dispatch: false }
+  );
+
+  handleFailure$ = createEffect(
+    () =>
+      this.actions$.pipe(
+        ofType(placeOrderFailure),
+        tap(() => {
+          this.snackbarService.showSnackBar(
+            "The order could not be placed. Your cart may be empty or have changed: please review it and try again."
+          );
+          this.store.dispatch(loadCart());
         })
       ),
     { dispatch: false }

@@ -23,7 +23,6 @@
     "@angular/platform-browser": "^20.1.2",
     "@angular/platform-browser-dynamic": "^20.1.2",
     "@angular/router": "^20.1.2",
-    "@google/genai": "^0.9.0",
     "@ngrx/effects": "^19.0.0",
     "@ngrx/entity": "^19.0.0",
     "@ngrx/operators": "^19.0.0",

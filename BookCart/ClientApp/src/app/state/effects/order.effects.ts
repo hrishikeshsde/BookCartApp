@@ -24,7 +24,7 @@ export class OrderEffects {
       switchMap(([, authenticatedUser]) => {
         if (authenticatedUser) {
           return this.myordersService
-            .myOrderDetails(authenticatedUser.userId)
+            .myOrderDetails()
             .pipe(
               map((orders) => loadOrdersSuccess({ orders })),
               catchError((error) =>

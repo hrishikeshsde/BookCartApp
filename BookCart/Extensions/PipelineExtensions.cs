@@ -1,4 +1,5 @@
 using BookCart.Options;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Options;
 using Scalar.AspNetCore;
 
@@ -7,14 +8,18 @@ namespace BookCart.Extensions
     public static class PipelineExtensions
     {
         // Report-only unless Security:EnforceCsp is true. Violations show up in the browser console, so the policy can
-        // be checked against the real built SPA (fonts, icons, the Gemini call) before it blocks anything.
+        // be checked against the real built SPA (fonts, icons) before it blocks anything. The browser only talks to this
+        // server (connect-src 'self'): the AI service is called by the API, not by the page.
         const string ContentSecurityPolicy =
             "default-src 'self'; script-src 'self'; " +
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://maxcdn.bootstrapcdn.com; " +
             "font-src 'self' https://fonts.gstatic.com https://maxcdn.bootstrapcdn.com; " +
-            "img-src 'self' data: https://static1.smartbear.co https://www.gstatic.com; " +
-            "connect-src 'self' https://generativelanguage.googleapis.com; " +   // browser-side Gemini call, removed once it moves behind the API
+            "img-src 'self' data: https://www.gstatic.com; " +   // gstatic: the Gemini sparkle icon on the summary button
+            "connect-src 'self'; " +
             "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+
+        // The route text MapFallbackToFile uses for page routes (any path that does not name a file).
+        const string SpaFallbackPattern = "{*path:nonfile}";
 
         /// <summary>The request pipeline, in order. The order matters: see the comment on each step.</summary>
         public static WebApplication UseBookCart(this WebApplication app)
@@ -60,9 +65,13 @@ namespace BookCart.Extensions
 
             // The fallback policy also applies to requests that matched no endpoint (a missing image or script), which
             // would turn a plain 404 into a 401. Nothing would run for those requests anyway, so answer 404 first.
+            // The same goes for the SPA shell asked for under /api: an unknown API route is a 404, not index.html.
             app.Use(async (context, next) =>
             {
-                if (context.GetEndpoint() is null)
+                var endpoint = context.GetEndpoint();
+                var shellUnderApi = endpoint is RouteEndpoint { RoutePattern.RawText: SpaFallbackPattern }
+                                    && context.Request.Path.StartsWithSegments("/api");
+                if (endpoint is null || shellUnderApi)
                 {
                     context.Response.StatusCode = StatusCodes.Status404NotFound;
                     return;
@@ -83,13 +92,13 @@ namespace BookCart.Extensions
                 app.MapScalarApiReference(options => options.WithTitle("BookCart API")).AllowAnonymous();
             }
 
-            // An unknown API route is a 404, not the SPA shell. Controller routes are more specific, so they win; this
-            // only catches what no controller claimed, before the fallback below can.
-            app.Map("/api/{**path}", () => Results.NotFound()).AllowAnonymous();
-
             // The SPA shell must stay public (the fallback policy would otherwise demand a login to load it). It is
-            // served for page routes only: a path that names a file (missing-chunk.js) is a 404 instead.
-            app.MapFallbackToFile("index.html").AllowAnonymous();
+            // served for page routes only: a path that names a file (missing-chunk.js) is a 404 instead. GET and HEAD
+            // only, so that a POST with the wrong content type still gets the framework's 415 and a wrong method its
+            // 405, instead of being swallowed by the fallback.
+            app.MapFallbackToFile(SpaFallbackPattern, "index.html")
+                .WithMetadata(new HttpMethodMetadata(["GET", "HEAD"]))
+                .AllowAnonymous();
 
             return app;
         }

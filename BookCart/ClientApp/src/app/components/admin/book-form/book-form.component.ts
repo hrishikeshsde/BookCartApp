@@ -57,7 +57,6 @@ export class BookFormComponent {
   private readonly fb = inject(FormBuilder);
   private readonly router = inject(Router);
   private readonly snackBarService = inject(SnackbarService);
-  private readonly formData = new FormData();
   private readonly store = inject(Store);
 
   coverImagePath;
@@ -105,15 +104,23 @@ export class BookFormComponent {
     if (!this.bookForm.valid) {
       return;
     }
+    // One field per book property, as the API binds them. Built fresh on every submit: a form object kept between
+    // submits would carry the fields of the previous attempt.
+    const { bookId, title, author, category, price } = this.bookForm.getRawValue();
+    const formData = new FormData();
+    formData.append("bookId", String(bookId));
+    formData.append("title", title);
+    formData.append("author", author);
+    formData.append("category", category);
+    formData.append("price", String(price));
     if (this.files && this.files.length > 0) {
-      this.formData.append("file", this.files[0]);
+      formData.append("file", this.files[0]);
     }
-    this.formData.append("bookFormData", JSON.stringify(this.bookForm.value));
 
-    if (this.bookForm.controls.bookId.value > 0) {
-      this.store.dispatch(updateBook({ book: this.formData }));
+    if (bookId > 0) {
+      this.store.dispatch(updateBook({ book: formData }));
     } else {
-      this.store.dispatch(addBook({ book: this.formData }));
+      this.store.dispatch(addBook({ book: formData }));
     }
   }
 

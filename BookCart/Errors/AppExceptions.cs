@@ -10,4 +10,10 @@ namespace BookCart.Errors
 
     /// <summary>The request conflicts with the current state, for example a taken username (409).</summary>
     public class ConflictException(string message) : Exception(message);
+
+    /// <summary>A service this API depends on answered with an error or nonsense (502).</summary>
+    public class UpstreamException(string message, Exception? inner = null) : Exception(message, inner);
+
+    /// <summary>A feature is switched off or not configured on this server (503).</summary>
+    public class ServiceUnavailableException(string message) : Exception(message);
 }

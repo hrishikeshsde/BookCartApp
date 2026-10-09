@@ -7,11 +7,24 @@ namespace BookCart.Services
     /// <summary>The uploaded file was rejected (wrong type, wrong content, empty or too large). A 400 if nothing handles it first.</summary>
     public sealed class InvalidUploadException(string message) : BadRequestException(message);
 
+    public interface ICoverStorage
+    {
+        /// <summary>The cover used when a book has no uploaded image. It is never deleted.</summary>
+        string DefaultFileName { get; }
+
+        /// <returns>The generated file name (not a path) the cover was stored under.</returns>
+        /// <exception cref="InvalidUploadException">The file is not an acceptable cover image.</exception>
+        Task<string> SaveAsync(IFormFile file, CancellationToken cancellationToken);
+
+        /// <summary>Deletes a stored cover; does nothing for the default cover, a missing file or a name that is not a plain file name.</summary>
+        void Delete(string? fileName);
+    }
+
     /// <summary>
     /// Stores book cover images under <c>wwwroot/Upload</c>. Nothing the client sends decides where a file goes or
     /// what it is called: the name is generated, the type comes from an allow-list, and the content must match the type.
     /// </summary>
-    public class CoverStorage(IWebHostEnvironment environment, IOptions<StorageOptions> options)
+    public class CoverStorage(IWebHostEnvironment environment, IOptions<StorageOptions> options) : ICoverStorage
     {
         /// <summary>Largest cover accepted. The request size limit on the book endpoints leaves room for the form around it.</summary>
         public const long MaxBytes = 2 * 1024 * 1024;

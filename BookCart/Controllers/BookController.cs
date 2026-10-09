@@ -1,122 +1,124 @@
-﻿using BookCart.Extensions;
-using BookCart.Interfaces;
+using BookCart.Dto;
+using BookCart.Errors;
+using BookCart.Extensions;
 using BookCart.Models;
 using BookCart.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.OutputCaching;
-using System.Text.Json;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace BookCart.Controllers
 {
     [Produces("application/json")]
     [ApiController]
     [Route("api/[controller]")]
-    public class BookController(IBookService bookService, CoverStorage coverStorage, IOutputCacheStore outputCache, ILogger<BookController> logger) : ControllerBase
+    public class BookController(
+        IBookService books,
+        IBookSummaryService summaries,
+        ICoverStorage covers,
+        IOutputCacheStore outputCache,
+        ILogger<BookController> logger) : ControllerBase
     {
-        // The admin form sends camelCase names and its price field as a string ("12.5"). Newtonsoft accepted both by
-        // default; System.Text.Json only does with the Web defaults (case-insensitive names, numbers from strings).
-        static readonly JsonSerializerOptions BookFormJson = new(JsonSerializerDefaults.Web);
-
         // The cover is capped at CoverStorage.MaxBytes (2 MB); this leaves room for the rest of the multipart form.
         const int MaxRequestBytes = 3_000_000;
 
-        readonly IBookService _bookService = bookService;
-        readonly CoverStorage _covers = coverStorage;
+        readonly IBookService _books = books;
+        readonly IBookSummaryService _summaries = summaries;
+        readonly ICoverStorage _covers = covers;
         readonly IOutputCacheStore _outputCache = outputCache;
         readonly ILogger<BookController> _logger = logger;
+
+        string? AdminId => User.FindFirst("userId")?.Value;
 
         /// <summary>
         /// Get the list of available books
         /// </summary>
-        /// <returns>List of Book</returns>
         [AllowAnonymous]
         [OutputCache(PolicyName = ApiExtensions.CatalogCachePolicy)]
         [HttpGet]
-        public async Task<List<Book>> Get()
-        {
-            return await Task.FromResult(_bookService.GetAllBooks()).ConfigureAwait(true);
-        }
+        public Task<List<BookDto>> Get(CancellationToken cancellationToken) => _books.GetAllBooksAsync(cancellationToken);
+
+        /// <summary>
+        /// One page of books, filtered and ordered by title in the database. Query: page (1-based), pageSize (max 100),
+        /// category, search (title or author contains), minPrice, maxPrice.
+        /// </summary>
+        [AllowAnonymous]
+        [HttpGet("search")]
+        [ProducesResponseType(typeof(PagedResult<BookDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public Task<PagedResult<BookDto>> Search([FromQuery] BookQuery query, CancellationToken cancellationToken) =>
+            _books.SearchBooksAsync(query, cancellationToken);
 
         /// <summary>
         /// Get the specific book data corresponding to the BookId
         /// </summary>
-        /// <param name="id"></param>
-        /// <returns></returns>
         [AllowAnonymous]
         [HttpGet("{id:int}")]
-        [ProducesResponseType(typeof(Book), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(BookDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public IActionResult Get(int id)
-        {
-            Book book = _bookService.GetBookData(id);
-            if (book != null)
-            {
-                return Ok(book);
-            }
-            return NotFound();
-        }
+        public async Task<ActionResult<BookDto>> Get(int id, CancellationToken cancellationToken) =>
+            await _books.GetBookAsync(id, cancellationToken) is { } book ? book : NotFound();
 
         /// <summary>
         /// Get the list of available categories
         /// </summary>
-        /// <returns></returns>
         [AllowAnonymous]
         [OutputCache(PolicyName = ApiExtensions.CatalogCachePolicy)]
-        [HttpGet]
-        [Route("GetCategoriesList")]
-        public async Task<IEnumerable<Categories>> CategoryDetails()
-        {
-            return await Task.FromResult(_bookService.GetCategories()).ConfigureAwait(true);
-        }
+        [HttpGet("GetCategoriesList")]
+        public Task<List<CategoryDto>> CategoryDetails(CancellationToken cancellationToken) => _books.GetCategoriesAsync(cancellationToken);
 
         /// <summary>
-        /// Get the random five books from the category of book whose BookId is supplied
+        /// Get up to five random other books from the category of the book whose BookId is supplied
         /// </summary>
-        /// <param name="bookId"></param>
-        /// <returns></returns>
         [AllowAnonymous]
-        [HttpGet]
-        [Route("GetSimilarBooks/{bookId:int}")]
-        [ProducesResponseType(typeof(List<Book>), StatusCodes.Status200OK)]
+        [HttpGet("GetSimilarBooks/{bookId:int}")]
+        [ProducesResponseType(typeof(List<BookDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<List<Book>> SimilarBooks(int bookId)
+        public Task<List<BookDto>> SimilarBooks(int bookId, CancellationToken cancellationToken) => _books.GetSimilarBooksAsync(bookId, cancellationToken);
+
+        /// <summary>
+        /// An AI-written summary of the book. The key to the AI service stays on the server, and each book is
+        /// summarised once per cache period, however many people ask.
+        /// </summary>
+        [AllowAnonymous]
+        [EnableRateLimiting("summary")]
+        [HttpPost("{id:int}/summary")]
+        [ProducesResponseType(typeof(BookSummaryDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+        [ProducesResponseType(StatusCodes.Status502BadGateway)]
+        [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+        public async Task<ActionResult<BookSummaryDto>> Summary(int id, CancellationToken cancellationToken)
         {
-            return await Task.FromResult(_bookService.GetSimilarBooks(bookId)).ConfigureAwait(true);
+            var book = await _books.GetBookAsync(id, cancellationToken);
+            if (book is null) return NotFound();
+
+            return new BookSummaryDto(await _summaries.GetSummaryAsync(book, cancellationToken));
         }
 
         /// <summary>
-        /// Add a new book record
+        /// Add a new book. Form fields: title, author, category, price, and an optional cover image in <c>file</c>.
         /// </summary>
-        /// <returns></returns>
         [HttpPost]
         [RequestSizeLimit(MaxRequestBytes)]
         [Authorize(Policy = UserRoles.Admin)]
-        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(BookDto), StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
-        public async Task<IActionResult> Post(CancellationToken cancellationToken)
+        public async Task<ActionResult<BookDto>> Post([FromForm] BookForm form, IFormFile? file, CancellationToken cancellationToken)
         {
-            var (book, cover, error) = await ReadBookForm(cancellationToken);
-            if (error is not null) return error;
-
-            book!.BookId = 0;   // the database assigns the id
             string? savedCover = null;
             try
             {
                 // The client never chooses the cover file name: it is the generated name, or the default.
-                book.CoverFileName = cover is null
-                    ? _covers.DefaultFileName
-                    : savedCover = await _covers.SaveAsync(cover, cancellationToken);
-                var result = _bookService.AddBook(book);
+                savedCover = file is null ? null : await _covers.SaveAsync(file, cancellationToken);
+                var book = await _books.AddBookAsync(form, savedCover ?? _covers.DefaultFileName, cancellationToken);
+
                 await _outputCache.EvictByTagAsync(ApiExtensions.CatalogCachePolicy, cancellationToken);
                 _logger.LogInformation("Admin {AdminId} added book {BookId} '{Title}'", AdminId, book.BookId, book.Title);
-                return Ok(result);
-            }
-            catch (InvalidUploadException ex)
-            {
-                return BadRequest(ex.Message);
+                return CreatedAtAction(nameof(Get), new { id = book.BookId }, book);
             }
             catch
             {
@@ -126,46 +128,32 @@ namespace BookCart.Controllers
         }
 
         /// <summary>
-        /// Update a particular book record
+        /// Update a book. Form fields: bookId, title, author, category, price, and an optional new cover in <c>file</c>
+        /// (without one, the stored cover is kept).
         /// </summary>
-        /// <returns></returns>
         [HttpPut]
         [RequestSizeLimit(MaxRequestBytes)]
         [Authorize(Policy = UserRoles.Admin)]
-        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(BookDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> Put(CancellationToken cancellationToken)
+        public async Task<ActionResult<BookDto>> Put([FromForm] BookForm form, IFormFile? file, CancellationToken cancellationToken)
         {
-            var (book, cover, error) = await ReadBookForm(cancellationToken);
-            if (error is not null) return error;
+            // Checked before anything is stored, so an update of a missing book leaves no file behind.
+            if (await _books.GetBookAsync(form.BookId, cancellationToken) is null) return NotFound();
 
-            var existing = _bookService.GetBookData(book!.BookId);
-            if (existing is null) return NotFound();
-
-            // A cover name sent by the client is ignored; null makes the data layer keep the stored one.
-            book.CoverFileName = null;
             string? savedCover = null;
             try
             {
-                if (cover is not null)
-                {
-                    book.CoverFileName = savedCover = await _covers.SaveAsync(cover, cancellationToken);
-                }
-                var result = _bookService.UpdateBook(book);
-                if (savedCover is not null)
-                {
-                    _covers.Delete(existing.CoverFileName);   // replaced: the old file is no longer referenced
-                }
+                savedCover = file is null ? null : await _covers.SaveAsync(file, cancellationToken);
+                var (book, replacedCover) = await _books.UpdateBookAsync(form, savedCover, cancellationToken);
+
+                _covers.Delete(replacedCover);   // replaced: the old file is no longer referenced
                 await _outputCache.EvictByTagAsync(ApiExtensions.CatalogCachePolicy, cancellationToken);
                 _logger.LogInformation("Admin {AdminId} updated book {BookId}{CoverChange}", AdminId, book.BookId, savedCover is null ? "" : " (cover replaced)");
-                return Ok(result);
-            }
-            catch (InvalidUploadException ex)
-            {
-                return BadRequest(ex.Message);
+                return book;
             }
             catch
             {
@@ -175,50 +163,21 @@ namespace BookCart.Controllers
         }
 
         /// <summary>
-        /// Delete a particular book record
+        /// Delete a book, and its cover image
         /// </summary>
-        /// <param name="id"></param>
-        /// <returns></returns>
         [HttpDelete("{id:int}")]
         [Authorize(Policy = UserRoles.Admin)]
-        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
         {
-            if (_bookService.GetBookData(id) is null) return NotFound();
+            _covers.Delete(await _books.DeleteBookAsync(id, cancellationToken));
 
-            _covers.Delete(_bookService.DeleteBook(id));
             await _outputCache.EvictByTagAsync(ApiExtensions.CatalogCachePolicy, cancellationToken);
             _logger.LogInformation("Admin {AdminId} deleted book {BookId}", AdminId, id);
-            return Ok(1);
-        }
-
-        string? AdminId => User.FindFirst("userId")?.Value;
-
-        /// <summary>Reads the multipart form the admin UI sends: the book as JSON in <c>bookFormData</c>, plus an optional cover file.</summary>
-        async Task<(Book? Book, IFormFile? Cover, IActionResult? Error)> ReadBookForm(CancellationToken cancellationToken)
-        {
-            if (!Request.HasFormContentType)
-            {
-                return (null, null, BadRequest("Expected a multipart/form-data request."));
-            }
-
-            var form = await Request.ReadFormAsync(cancellationToken);
-            Book? book;
-            try
-            {
-                book = JsonSerializer.Deserialize<Book>(form["bookFormData"].ToString(), BookFormJson);
-            }
-            catch (JsonException)
-            {
-                book = null;
-            }
-
-            return book is null
-                ? (null, null, BadRequest("The form field 'bookFormData' must contain the book as JSON."))
-                : (book, form.Files.Count > 0 ? form.Files[0] : null, null);
+            return NoContent();
         }
     }
 }

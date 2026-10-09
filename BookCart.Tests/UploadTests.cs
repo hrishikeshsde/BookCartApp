@@ -1,5 +1,7 @@
 using System.Net;
+using System.Globalization;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using BookCart.Models;
@@ -36,11 +38,11 @@ public partial class UploadTests(ApiFactory factory)
 
         var response = await admin.PostAsync("/api/book", BookForm(title, file: (clientName, bytes)));
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var book = await FindBook(title);
         Assert.Matches(@"^[0-9a-f]{32}\.(png|jpeg|jpg|webp)$", book.CoverFileName);
         Assert.DoesNotContain("cover", book.CoverFileName, StringComparison.OrdinalIgnoreCase);   // the client's name is not used
-        Assert.Equal(bytes, await File.ReadAllBytesAsync(Path.Combine(_factory.UploadFolder, book.CoverFileName)));
+        Assert.Equal(bytes, await File.ReadAllBytesAsync(Path.Combine(_factory.UploadFolder, book.CoverFileName!)));
     }
 
     [Theory]
@@ -54,10 +56,10 @@ public partial class UploadTests(ApiFactory factory)
 
         var response = await admin.PostAsync("/api/book", BookForm(title, file: (clientName, Png)));
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var book = await FindBook(title);
         Assert.Matches(GeneratedName(), book.CoverFileName);
-        Assert.True(File.Exists(Path.Combine(_factory.UploadFolder, book.CoverFileName)));
+        Assert.True(File.Exists(Path.Combine(_factory.UploadFolder, book.CoverFileName!)));
         // Wherever "escape.png" could have ended up (the web root, or any folder the name climbs to), it is not there.
         Assert.Empty(Directory.GetFiles(_factory.Sandbox, "escape.png", SearchOption.AllDirectories));
         Assert.Empty(Directory.GetFiles(_factory.Sandbox, "c.png", SearchOption.AllDirectories));
@@ -71,7 +73,7 @@ public partial class UploadTests(ApiFactory factory)
 
         var response = await admin.PostAsync("/api/book", BookForm("No cover"));
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         Assert.Equal("Default_image.jpg", (await FindBook("No cover")).CoverFileName);
         Assert.Equal(before, Directory.GetFiles(_factory.UploadFolder).Length);
     }
@@ -138,58 +140,103 @@ public partial class UploadTests(ApiFactory factory)
 
         var response = await admin.PostAsync("/api/book", BookForm("At limit", file: ("limit.png", atLimit)));
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
     }
 
     [Fact]
-    public async Task Malformed_requests_are_400_not_500()
+    public async Task Invalid_forms_are_400_and_name_the_invalid_fields()
     {
         var admin = await AdminClient();
 
-        var notJson = new MultipartFormDataContent { { new StringContent("this is not json"), "bookFormData" } };
-        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsync("/api/book", notJson)).StatusCode);
+        // Nothing but an unrelated field: every required field is reported.
+        var empty = new MultipartFormDataContent { { new StringContent("x"), "somethingElse" } };
+        var response = await admin.PostAsync("/api/book", empty);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var errors = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errors");
+        foreach (var field in new[] { "Title", "Author", "Category", "Price" })
+        {
+            Assert.True(errors.TryGetProperty(field, out _), $"{field} should be reported as invalid");
+        }
+    }
 
-        var missingField = new MultipartFormDataContent { { new StringContent("x"), "somethingElse" } };
-        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsync("/api/book", missingField)).StatusCode);
+    [Theory]
+    [InlineData("price", "abc")]
+    [InlineData("price", "-1")]
+    [InlineData("price", "100000000")]            // more than decimal(10,2) can hold
+    [InlineData("bookId", "not a number")]
+    [InlineData("title", "")]
+    [InlineData("title", "101 characters")]       // stands for a 101-character value, see below
+    [InlineData("author", "101 characters")]
+    [InlineData("category", "21 characters")]
+    public async Task Invalid_or_wrongly_typed_book_fields_are_a_400_and_store_nothing(string field, string value)
+    {
+        var admin = await AdminClient();
+        value = value switch { "101 characters" => new string('x', 101), "21 characters" => new string('x', 21), _ => value };
+        var title = "Invalid " + Guid.NewGuid().ToString("N");
 
-        var notMultipart = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
-        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsync("/api/book", notMultipart)).StatusCode);
+        // A valid form with just this one field replaced, so the field has exactly one value.
+        var fields = new Dictionary<string, string> { ["bookId"] = "0", ["title"] = title, ["author"] = "A", ["category"] = "Fiction", ["price"] = "5" };
+        fields[field] = value;
+        var form = new MultipartFormDataContent();
+        foreach (var (name, text) in fields) form.Add(new StringContent(text), name);
+
+        var response = await admin.PostAsync("/api/book", form);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await AssertNoBook(title);   // when the title itself is the invalid field nothing could have been stored under it either
     }
 
     [Fact]
-    public async Task The_form_the_angular_app_really_sends_is_accepted()
+    public async Task A_request_that_is_not_a_form_is_rejected()
     {
-        // Verbatim shape of the admin form: camelCase names, bookId as a number and price as a STRING (a text
-        // input's value). Newtonsoft parsed this; System.Text.Json only does with NumberHandling.AllowReadingFromString.
+        var admin = await AdminClient();
+
+        var json = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
+
+        Assert.Equal(HttpStatusCode.UnsupportedMediaType, (await admin.PostAsync("/api/book", json)).StatusCode);
+    }
+
+    [Fact]
+    public async Task The_form_the_angular_app_really_sends_is_accepted_and_the_saved_book_comes_back()
+    {
+        // The admin form sends each field on its own and the price as the TEXT of an input ("12.5").
         var admin = await AdminClient();
         var title = "Angular " + Guid.NewGuid().ToString("N");
         var form = new MultipartFormDataContent
         {
-            { new StringContent($$"""{"bookId":0,"title":"{{title}}","author":"A. Author","category":"Fiction","price":"12.5"}"""), "bookFormData" }
+            { new StringContent("0"), "bookId" }, { new StringContent(title), "title" }, { new StringContent("A. Author"), "author" },
+            { new StringContent("Fiction"), "category" }, { new StringContent("12.5"), "price" }
         };
 
         var response = await admin.PostAsync("/api/book", form);
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        // The Angular reducers add this straight to the store, so it must be the saved book (it used to be the number 1).
+        Assert.True(body.GetProperty("bookId").GetInt32() > 0);
+        Assert.Equal(title, body.GetProperty("title").GetString());
+        Assert.Equal(12.5m, body.GetProperty("price").GetDecimal());
+        Assert.Equal("Default_image.jpg", body.GetProperty("coverFileName").GetString());
+        Assert.Equal($"/api/Book/{body.GetProperty("bookId").GetInt32()}", response.Headers.Location?.AbsolutePath, ignoreCase: true);
+
         var book = await FindBook(title);
         Assert.Equal(12.5m, book.Price);
         Assert.Equal("A. Author", book.Author);
     }
 
-    [Theory]
-    [InlineData("\"price\":\"abc\"")]
-    [InlineData("\"price\":{}")]
-    [InlineData("\"bookId\":\"not a number\"")]
-    public async Task Wrongly_typed_book_fields_are_a_400_not_a_500(string badField)
+    [Fact]
+    public async Task A_client_cannot_choose_the_id_or_the_cover_name_of_a_new_book()
     {
         var admin = await AdminClient();
-        var json = $$"""{"title":"Bad types","author":"A","category":"Fiction",{{badField}}}""";
-        var form = new MultipartFormDataContent { { new StringContent(json), "bookFormData" } };
+        var title = "Mine " + Guid.NewGuid().ToString("N");
+        var form = BookForm(title, bookId: 424242, coverFileName: @"..\..\evil.png");
 
         var response = await admin.PostAsync("/api/book", form);
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        await AssertNoBook("Bad types");
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var book = await FindBook(title);
+        Assert.NotEqual(424242, book.BookId);
+        Assert.Equal("Default_image.jpg", book.CoverFileName);
     }
 
     [Fact]
@@ -220,8 +267,8 @@ public partial class UploadTests(ApiFactory factory)
         var updated = await FindBook(title);
         Assert.NotEqual(original.CoverFileName, updated.CoverFileName);
         Assert.EndsWith(".jpg", updated.CoverFileName);
-        Assert.True(File.Exists(Path.Combine(_factory.UploadFolder, updated.CoverFileName)));
-        Assert.False(File.Exists(Path.Combine(_factory.UploadFolder, original.CoverFileName)), "the replaced cover must not be left behind");
+        Assert.True(File.Exists(Path.Combine(_factory.UploadFolder, updated.CoverFileName!)));
+        Assert.False(File.Exists(Path.Combine(_factory.UploadFolder, original.CoverFileName!)), "the replaced cover must not be left behind");
     }
 
     [Fact]
@@ -239,7 +286,7 @@ public partial class UploadTests(ApiFactory factory)
         var updated = await FindBook(title);
         Assert.Equal(original.CoverFileName, updated.CoverFileName);
         Assert.Equal(12.34m, updated.Price);   // the rest of the update still applied
-        Assert.True(File.Exists(Path.Combine(_factory.UploadFolder, original.CoverFileName)));
+        Assert.True(File.Exists(Path.Combine(_factory.UploadFolder, original.CoverFileName!)));
     }
 
     [Fact]
@@ -255,7 +302,7 @@ public partial class UploadTests(ApiFactory factory)
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal(original.CoverFileName, (await FindBook(title)).CoverFileName);
-        Assert.True(File.Exists(Path.Combine(_factory.UploadFolder, original.CoverFileName)));
+        Assert.True(File.Exists(Path.Combine(_factory.UploadFolder, original.CoverFileName!)));
     }
 
     [Fact]
@@ -279,10 +326,10 @@ public partial class UploadTests(ApiFactory factory)
         var title = "Delete " + Guid.NewGuid().ToString("N");
         await admin.PostAsync("/api/book", BookForm(title, file: ("one.png", Png)));
         var book = await FindBook(title);
-        var path = Path.Combine(_factory.UploadFolder, book.CoverFileName);
+        var path = Path.Combine(_factory.UploadFolder, book.CoverFileName!);
         Assert.True(File.Exists(path));
 
-        Assert.Equal(HttpStatusCode.OK, (await admin.DeleteAsync($"/api/book/{book.BookId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await admin.DeleteAsync($"/api/book/{book.BookId}")).StatusCode);
 
         Assert.False(File.Exists(path));
         await AssertNoBook(title);
@@ -320,7 +367,7 @@ public partial class UploadTests(ApiFactory factory)
             bookId = poisoned.BookId;
         }
 
-        Assert.Equal(HttpStatusCode.OK, (await admin.DeleteAsync($"/api/book/{bookId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await admin.DeleteAsync($"/api/book/{bookId}")).StatusCode);
 
         Assert.True(File.Exists(sentinel), "a file outside the upload folder was deleted");
     }
@@ -337,12 +384,20 @@ public partial class UploadTests(ApiFactory factory)
 
     Task<HttpClient> AdminClient() => _factory.LoggedIn("adminuser", ApiFactory.AdminPassword);
 
-    /// <summary>The multipart form the admin UI sends: the book as JSON in "bookFormData", plus an optional "file".</summary>
+    /// <summary>The multipart form the admin UI sends: one field per book property, plus an optional "file".</summary>
     static MultipartFormDataContent BookForm(string title, int bookId = 0, decimal price = 9.99m,
         (string Name, byte[] Bytes)? file = null, string? coverFileName = null)
     {
-        var json = JsonSerializer.Serialize(new { bookId, title, author = "Author", category = "Fiction", price, coverFileName });
-        var form = new MultipartFormDataContent { { new StringContent(json), "bookFormData" } };
+        var form = new MultipartFormDataContent
+        {
+            { new StringContent(bookId.ToString(CultureInfo.InvariantCulture)), "bookId" },
+            { new StringContent(title), "title" },
+            { new StringContent("Author"), "author" },
+            { new StringContent("Fiction"), "category" },
+            { new StringContent(price.ToString(CultureInfo.InvariantCulture)), "price" }
+        };
+        // Not a book field any more. A client that still sends one must have it ignored.
+        if (coverFileName is not null) form.Add(new StringContent(coverFileName), "coverFileName");
         if (file is { } f)
         {
             var part = new ByteArrayContent(f.Bytes);

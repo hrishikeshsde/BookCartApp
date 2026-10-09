@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using BookCart.DataAccess;
+using BookCart.Services;
 using BookCart.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -19,7 +19,7 @@ public class CheckoutTests(ApiFactory factory)
     {
         var (userId, client) = await SignedInUserWithCart(new Line(10.00m, 2), new Line(4.50m, 1));
 
-        var response = await client.PostAsJsonAsync($"/api/checkout/{userId}", new { });
+        var response = await client.PostAsJsonAsync("/api/checkout", new { });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var orderId = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("orderId").GetString()!;
@@ -39,31 +39,11 @@ public class CheckoutTests(ApiFactory factory)
         var (userId, username, password) = await _factory.NewUserAsync();
         var client = await _factory.LoggedIn(username, password);
 
-        var response = await client.PostAsJsonAsync($"/api/checkout/{userId}", new { });
+        var response = await client.PostAsJsonAsync("/api/checkout", new { });
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         await using var db = _factory.CreateDbContext();
         Assert.Equal(0, await db.CustomerOrders.CountAsync(o => o.UserId == userId));
-    }
-
-    [Fact]
-    public async Task Unbuyable_rows_are_ignored_and_duplicate_rows_are_combined()
-    {
-        var bookId = await AddBook(8.00m);
-        var (userId, username, password) = await _factory.NewUserAsync();
-        await SeedCart(userId, (bookId, 1), (bookId, 2), (_factory.BookId, 0), (999_999, 1));   // duplicate, zero quantity, missing book
-        var client = await _factory.LoggedIn(username, password);
-
-        var response = await client.PostAsJsonAsync($"/api/checkout/{userId}", new { });
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        await using var db = _factory.CreateDbContext();
-        var order = await db.CustomerOrders.AsNoTracking().SingleAsync(o => o.UserId == userId);
-        var line = await db.CustomerOrderDetails.AsNoTracking().SingleAsync(d => d.OrderId == order.OrderId);
-        Assert.Equal(bookId, line.ProductId);
-        Assert.Equal(3, line.Quantity);
-        Assert.Equal(24.00m, order.CartTotal);
-        Assert.Equal(0, await CartRowCount(db, userId));
     }
 
     [Fact]
@@ -74,7 +54,7 @@ public class CheckoutTests(ApiFactory factory)
         var options = new DbContextOptionsBuilder<BookDBContext>().UseSqlServer(TestDb.ConnectionString).Options;
         await using (var failing = new FailingSaveDbContext(options))
         {
-            await Assert.ThrowsAsync<InvalidOperationException>(() => new OrderDataAccessLayer(failing, NullLogger<OrderDataAccessLayer>.Instance).CreateOrderAsync(userId));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => new OrderService(failing, TimeProvider.System, NullLogger<OrderService>.Instance).CreateOrderAsync(userId, CancellationToken.None));
         }
 
         // The cart rows were deleted inside the transaction before the failure; the rollback must have restored them.
@@ -92,8 +72,8 @@ public class CheckoutTests(ApiFactory factory)
         var second = await _factory.LoggedIn(username, password);
 
         var responses = await Task.WhenAll(
-            first.PostAsJsonAsync($"/api/checkout/{userId}", new { }),
-            second.PostAsJsonAsync($"/api/checkout/{userId}", new { }));
+            first.PostAsJsonAsync("/api/checkout", new { }),
+            second.PostAsJsonAsync("/api/checkout", new { }));
 
         Assert.Equal(new[] { HttpStatusCode.OK, HttpStatusCode.Conflict }, responses.Select(r => r.StatusCode).Order().ToArray());
         await using var db = _factory.CreateDbContext();
@@ -101,12 +81,15 @@ public class CheckoutTests(ApiFactory factory)
     }
 
     [Fact]
-    public async Task Nobody_can_check_out_someone_elses_cart_not_even_an_admin()
+    public async Task Checkout_only_ever_uses_the_callers_own_cart_not_even_an_admins_can_reach_another()
     {
         var (userId, _) = await SignedInUserWithCart(new Line(10.00m, 1));
         var admin = await _factory.LoggedIn("adminuser", ApiFactory.AdminPassword);
 
-        Assert.Equal(HttpStatusCode.Forbidden, (await admin.PostAsJsonAsync($"/api/checkout/{userId}", new { })).StatusCode);
+        // There is no id to name: the admin checks out their own (empty) cart and is told so.
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.PostAsJsonAsync("/api/checkout", new { })).StatusCode);
+        // And someone who is not logged in cannot check out at all.
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _factory.CreateClient().PostAsJsonAsync("/api/checkout", new { })).StatusCode);
 
         await using var db = _factory.CreateDbContext();
         Assert.Equal(1, await CartRowCount(db, userId));

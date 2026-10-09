@@ -5,7 +5,7 @@
         class="btn-gemini"
         color="primary"
         mat-raised-button
-        (click)="fetchSummaryFromGemini()"
+        (click)="fetchSummary()"
       >
         <span
           ><img
@@ -20,8 +20,10 @@
     <div class="d-flex justify-content-center mt-4">
       <mat-spinner diameter="50"></mat-spinner>
     </div>
-    } @else { @if (bookSummary.length > 0) {
-    <p class="mt-4">{{ bookSummary }}</p>
+    } @else { @if (errorMessage()) {
+    <p class="mt-4">{{ errorMessage() }}</p>
+    } @else if (bookSummary().length > 0) {
+    <p class="mt-4">{{ bookSummary() }}</p>
     } }
   </mat-card-content>
 </mat-card>

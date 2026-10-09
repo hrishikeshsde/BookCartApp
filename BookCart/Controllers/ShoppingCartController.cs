@@ -1,113 +1,84 @@
-﻿using BookCart.Dto;
-using BookCart.Interfaces;
+using BookCart.Dto;
 using BookCart.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BookCart.Controllers
 {
-    // Carts are usable by signed-in users and by anonymous guests (see GuestController). [AllowAnonymous] is applied
-    // per action, because on the class it would also override [Authorize] on SetShoppingCart. [RequireOwner] makes
-    // every {userId} route accept only the caller's own user id or guest id.
-    [RequireOwner]
+    /// <summary>
+    /// The caller's own shopping cart. There is no user id in the URL: the cart is the signed-in user's, or else the
+    /// anonymous guest's (the first book added starts the guest session). Logging in merges the guest cart into the user's.
+    /// </summary>
+    [AllowAnonymous]
     [ApiController]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [Route("api/[controller]")]
-    public class ShoppingCartController(ICartService cartService, IBookService bookService, ICurrentUser currentUser) : ControllerBase
+    public class ShoppingCartController(ICartService cart, ICurrentUser currentUser, IGuestSession guestSession) : ControllerBase
     {
-        readonly ICartService _cartService = cartService;
-        readonly IBookService _bookService = bookService;
+        readonly ICartService _cart = cart;
         readonly ICurrentUser _currentUser = currentUser;
+        readonly IGuestSession _guestSession = guestSession;
 
         /// <summary>
-        /// Merge the caller's guest cart into their own cart after login.
+        /// Get the items in the caller's shopping cart (empty for someone who has not added anything yet)
         /// </summary>
-        /// <param name="oldUserId">The caller's guest id (from the guest cookie)</param>
-        /// <param name="newUserId">The caller's own user id</param>
-        /// <returns>The count of items in shopping cart</returns>
-        [Authorize]
         [HttpGet]
-        [Route("SetShoppingCart/{oldUserId:int}/{newUserId:int}")]
-        public IActionResult Get(int oldUserId, int newUserId)
-        {
-            // Only the signed-in user's own cart can be the target, and only their own guest cart the source.
-            // Never another user's cart, and admins get no exception: merging deletes the source cart.
-            if (_currentUser.UserId != newUserId || _currentUser.GuestId != oldUserId)
-            {
-                return Forbid();
-            }
+        public Task<List<CartItemDto>> Get(CancellationToken cancellationToken) => CurrentCartAsync(cancellationToken);
 
-            _cartService.MergeCart(oldUserId, newUserId);
-            return Ok(_cartService.GetCartItemCount(newUserId));
+        /// <summary>
+        /// Get the number of items (counting quantities) in the caller's shopping cart
+        /// </summary>
+        [HttpGet("count")]
+        public async Task<int> Count(CancellationToken cancellationToken) =>
+            _currentUser.CartOwnerId is { } owner ? await _cart.GetItemCountAsync(owner, cancellationToken) : 0;
+
+        /// <summary>
+        /// Add one copy of a book. If the book is already in the cart, its quantity goes up by one.
+        /// </summary>
+        /// <returns>The updated cart</returns>
+        [HttpPost("items/{bookId:int}")]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<List<CartItemDto>> AddBook(int bookId, CancellationToken cancellationToken)
+        {
+            // Someone with neither an account nor a guest session gets a guest session now.
+            var owner = _currentUser.CartOwnerId ?? _guestSession.StartOrContinue();
+            await _cart.AddBookAsync(owner, bookId, cancellationToken);
+            return await _cart.GetCartAsync(owner, cancellationToken);
         }
 
         /// <summary>
-        /// Get the list of items in the shopping cart
+        /// Take one copy of a book out of the cart. The last copy removes the book.
         /// </summary>
-        /// <param name="userId"></param>
-        /// <returns></returns>
-        [AllowAnonymous]
-        [HttpGet("{userId:int}")]
-        public async Task<List<CartItemDto>> Get(int userId)
+        /// <returns>The updated cart</returns>
+        [HttpPatch("items/{bookId:int}")]
+        public async Task<List<CartItemDto>> DecreaseQuantity(int bookId, CancellationToken cancellationToken)
         {
-            string cartid = _cartService.GetCartId(userId);
-            return await Task.FromResult(_bookService.GetBooksAvailableInCart(cartid)).ConfigureAwait(true);
+            if (_currentUser.CartOwnerId is { } owner) await _cart.DecreaseQuantityAsync(owner, bookId, cancellationToken);
+            return await CurrentCartAsync(cancellationToken);
         }
 
         /// <summary>
-        /// Add a single item into the shopping cart. If the item already exists, increase the quantity by one
+        /// Remove a book from the cart whatever its quantity
         /// </summary>
-        /// <param name="userId"></param>
-        /// <param name="bookId"></param>
-        /// <returns></returns>
-        [AllowAnonymous]
-        [HttpPost]
-        [Route("AddToCart/{userId:int}/{bookId:int}")]
-        public async Task<List<CartItemDto>> Post(int userId, int bookId)
+        /// <returns>The updated cart</returns>
+        [HttpDelete("items/{bookId:int}")]
+        public async Task<List<CartItemDto>> RemoveBook(int bookId, CancellationToken cancellationToken)
         {
-            _cartService.AddBookToCart(userId, bookId);
-            return await Get(userId);
+            if (_currentUser.CartOwnerId is { } owner) await _cart.RemoveBookAsync(owner, bookId, cancellationToken);
+            return await CurrentCartAsync(cancellationToken);
         }
 
         /// <summary>
-        /// Reduces the quantity by one for an item in shopping cart
+        /// Empty the cart
         /// </summary>
-        /// <param name="userId"></param>
-        /// <param name="bookId"></param>
-        /// <returns></returns>
-        [AllowAnonymous]
-        [HttpPut("{userId:int}/{bookId:int}")]
-        public async Task<List<CartItemDto>> Put(int userId, int bookId)
+        [HttpDelete]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        public async Task<IActionResult> Clear(CancellationToken cancellationToken)
         {
-            _cartService.DeleteOneCartItem(userId, bookId);
-            return await Get(userId);
+            if (_currentUser.CartOwnerId is { } owner) await _cart.ClearAsync(owner, cancellationToken);
+            return NoContent();
         }
 
-        /// <summary>
-        /// Delete a single item from the cart 
-        /// </summary>
-        /// <param name="userId"></param>
-        /// <param name="bookId"></param>
-        /// <returns></returns>
-        [AllowAnonymous]
-        [HttpDelete("{userId:int}/{bookId:int}")]
-        public async Task<List<CartItemDto>> Delete(int userId, int bookId)
-        {
-            _cartService.RemoveCartItem(userId, bookId);
-            return await Get(userId);
-        }
-
-        /// <summary>
-        /// Clear the shopping cart
-        /// </summary>
-        /// <param name="userId"></param>
-        /// <returns></returns>
-        [AllowAnonymous]
-        [HttpDelete("{userId:int}")]
-        public int Delete(int userId)
-        {
-            return _cartService.ClearCart(userId);
-        }
+        async Task<List<CartItemDto>> CurrentCartAsync(CancellationToken cancellationToken) =>
+            _currentUser.CartOwnerId is { } owner ? await _cart.GetCartAsync(owner, cancellationToken) : [];
     }
 }

@@ -1,5 +1,5 @@
-import { inject, Injectable } from "@angular/core";
 import { HttpClient } from "@angular/common/http";
+import { inject, Injectable } from "@angular/core";
 import { CustomerOrder } from "../models/order";
 
 @Injectable({
@@ -7,9 +7,10 @@ import { CustomerOrder } from "../models/order";
 })
 export class MyordersService {
   private readonly http = inject(HttpClient);
-  private readonly baseURL = "/api/Order/";
+  private readonly baseURL = "/api/order";
 
-  myOrderDetails(userId: number) {
-    return this.http.get<CustomerOrder[]>(this.baseURL + userId);
+  /** The signed-in user's own orders: the server knows who that is from the token. */
+  myOrderDetails() {
+    return this.http.get<CustomerOrder[]>(this.baseURL);
   }
 }

@@ -63,7 +63,7 @@ public static class TestDb
     public static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "BookCart.sln"))) directory = directory.Parent;
-        return directory?.FullName ?? throw new InvalidOperationException("BookCart.sln was not found above the test output folder.");
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "BookCart.slnx"))) directory = directory.Parent;
+        return directory?.FullName ?? throw new InvalidOperationException("BookCart.slnx was not found above the test output folder.");
     }
 }

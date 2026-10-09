@@ -301,6 +301,14 @@ public class PlumbingTests(ApiFactory factory)
         Assert.False(Secured("/api/ShoppingCart", "get"));         // guests have carts
         Assert.False(Secured("/api/ShoppingCart/items/{bookId}", "post"));
         Assert.False(Secured("/api/Book/{id}/summary", "post"));
+        // The XML comments on the controllers are the descriptions in the document (GenerateDocumentationFile).
+        string Summary(string path, string method) =>
+            doc.GetProperty("paths").EnumerateObject().Single(p => string.Equals(p.Name, path, StringComparison.OrdinalIgnoreCase)).Value
+               .GetProperty(method).GetProperty("summary").GetString()!;
+
+        Assert.Contains("Login to the application", Summary("/api/Login", "post"));
+        Assert.Contains("own orders", Summary("/api/Order", "get"));
+        Assert.Contains("Place an order", Summary("/api/CheckOut", "post"));
     }
 
     // ---- logging -----------------------------------------------------------------------------------------------

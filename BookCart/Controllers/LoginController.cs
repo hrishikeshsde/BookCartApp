@@ -24,7 +24,8 @@ namespace BookCart.Controllers
         /// <summary>
         /// Login to the application. Whatever the visitor put in their cart as a guest is merged into their own cart.
         /// </summary>
-        /// <param name="login"></param>
+        /// <param name="login">The username and password.</param>
+        /// <param name="cancellationToken">Cancelled when the caller disconnects.</param>
         /// <returns>A JWT and the signed-in user's details</returns>
         [AllowAnonymous]
         [EnableRateLimiting("auth")]

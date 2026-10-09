@@ -1,0 +1,9 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="BookCart.Tests/BookCart.Tests.csproj" />
+  <Project Path="BookCart/BookCart.csproj" Type="9a19103f-16f7-4668-be54-9a1e7a4f8246" />
+</Solution>

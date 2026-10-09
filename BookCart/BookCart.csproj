@@ -7,6 +7,13 @@
     <SpaProxyLaunchCommand>npm start</SpaProxyLaunchCommand>
     <RootNamespace>BookCart</RootNamespace>
     <UserSecretsId>337c238c-d2cd-472f-b790-95efa96acfeb</UserSecretsId>
+    <!-- XML comments on controllers become the descriptions in the OpenAPI document. CS1591 (undocumented public member) is not wanted. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
+    <!-- Container image (dotnet publish -t:PublishContainer): the name, and a port above 1024 so it can run as a non-root user. -->
+    <ContainerRepository>bookcart</ContainerRepository>
+    <!-- The XML file is only needed at build time (it feeds the OpenAPI document); the running app does not read it. -->
+    <PublishDocumentationFile>false</PublishDocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -36,17 +43,18 @@
     </Exec>
     <Error Condition="'$(ErrorCode)' != '0'" Text="Node.js is required to build and run this project. To continue, please install Node.js from https://nodejs.org/, and then restart your command prompt or IDE." />
     <Message Importance="high" Text="Restoring dependencies using 'npm'. This may take several minutes..." />
-    <Exec WorkingDirectory="$(SpaRoot)" Command="npm install" />
+    <Exec WorkingDirectory="$(SpaRoot)" Command="npm ci" />
   </Target>
 
-  <Target Name="PublishRunWebpack" AfterTargets="ComputeFilesToPublish">
-    <!-- As part of publishing, ensure the JS resources are freshly built in production mode -->
-    <Exec WorkingDirectory="$(SpaRoot)" Command="npm install" />
+  <Target Name="PublishBuildClient" AfterTargets="ComputeFilesToPublish">
+    <!-- As part of publishing, build the Angular app in production mode (from the lock file, so the build is reproducible) -->
+    <Exec WorkingDirectory="$(SpaRoot)" Command="npm ci" />
     <Exec WorkingDirectory="$(SpaRoot)" Command="npm run build -- --configuration production" />
 
     <!-- Include the newly-built files in the publish output -->
     <ItemGroup>
-      <DistFiles Include="$(SpaRoot)dist\**; $(SpaRoot)dist-server\**" />
+      <!-- prerendered-routes.json is an Angular build by-product the app never reads (there is no server-side rendering) -->
+      <DistFiles Include="$(SpaRoot)dist\**; $(SpaRoot)dist-server\**" Exclude="$(SpaRoot)dist\prerendered-routes.json" />
       <ResolvedFileToPublish Include="@(DistFiles->'%(FullPath)')" Exclude="@(ResolvedFileToPublish)">
         <RelativePath>wwwroot\%(FileName)%(Extension)</RelativePath>
         <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>

@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (build, format, test)
+    runs-on: ubuntu-latest
+    services:
+      # The tests host the real API on a throwaway database that is dropped and rebuilt with the real migrations on every
+      # run. LocalDB (the local default) does not exist on Linux, so they get a SQL Server container instead.
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Ci_only_Passw0rd!"
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Ci_only_Passw0rd!' -Q 'SELECT 1' -b"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+          --health-start-period 20s
+    env:
+      # Never point this at a real database: the test fixture drops it.
+      BOOKCART_TEST_DB: Server=localhost,1433;Database=BookDB_Test;User Id=sa;Password=Ci_only_Passw0rd!;TrustServerCertificate=True
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Restore
+        run: dotnet restore BookCart.slnx
+      - name: Check formatting
+        run: dotnet format BookCart.slnx --verify-no-changes --no-restore
+      # Release: a Debug build of the web project also installs the Angular client's packages, which this job does not need.
+      - name: Build (warnings are errors)
+        run: dotnet build BookCart.slnx -c Release --no-restore
+      - name: Test
+        run: dotnet test BookCart.Tests -c Release --no-build --logger "trx;LogFileName=test-results.trx"
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: "**/test-results.trx"
+          if-no-files-found: ignore
+
+  frontend:
+    name: Frontend (build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: BookCart/ClientApp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: BookCart/ClientApp/package-lock.json
+      # .npmrc sets legacy-peer-deps (the @ngrx 19 packages declare Angular 19 as a peer; the app runs Angular 20).
+      - run: npm ci
+      - run: npm run build -- --configuration production
+
+  container:
+    name: Container image
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Publishing builds the Angular client (npm ci + production build) and writes the image to a tar archive:
+      # nothing is pushed anywhere. Load it with `docker load -i bookcart.tar`.
+      - name: Build image archive
+        run: >-
+          dotnet publish BookCart/BookCart.csproj -c Release --os linux --arch x64 -t:PublishContainer
+          -p:ContainerArchiveOutputPath=${{ github.workspace }}/bookcart.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bookcart-image
+          path: bookcart.tar
+          retention-days: 7

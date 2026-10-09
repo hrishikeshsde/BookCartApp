@@ -85,14 +85,29 @@ public class HardeningTests(ApiFactory factory)
         Assert.Equal(HttpStatusCode.OK, (await development.GetAsync("/openapi/v1.json")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await development.GetAsync("/scalar/v1")).StatusCode);
 
-        var production = _factory.WithWebHostBuilder(b => b.UseEnvironment("Production"));
-        var client = production.CreateClient();
-        foreach (var path in new[] { "/openapi/v1.json", "/scalar/v1", "/scalar" })
+        // A published app has an index.html: an unknown page route is answered with the Angular shell, so what matters
+        // is that the API reference is not what comes back.
+        Directory.CreateDirectory(_factory.WebRoot);
+        var index = Path.Combine(_factory.WebRoot, "index.html");
+        await File.WriteAllTextAsync(index, "<html><body><app-root>angular shell</app-root></body></html>");
+        try
         {
-            var status = (await client.GetAsync(path)).StatusCode;
-            Assert.True(status == HttpStatusCode.NotFound, $"GET {path} in Production returned {(int)status}, expected 404");
+            var production = _factory.WithWebHostBuilder(b => b.UseEnvironment("Production"));
+            var client = production.CreateClient();
+
+            Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/openapi/v1.json")).StatusCode);
+            foreach (var path in new[] { "/scalar/v1", "/scalar" })
+            {
+                var body = await (await client.GetAsync(path)).Content.ReadAsStringAsync();
+                Assert.Contains("angular shell", body);
+                Assert.DoesNotContain("scalar", body, StringComparison.OrdinalIgnoreCase);
+            }
+            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/book")).StatusCode);   // the API itself still works
         }
-        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/book")).StatusCode);   // the API itself still works
+        finally
+        {
+            File.Delete(index);
+        }
     }
 
     // ---- security headers --------------------------------------------------------------------------------------

@@ -233,3 +233,8 @@ _Pvt_Extensions
 # Uploaded book covers are user data, not source. Only the default cover ships with the repo.
 BookCart/wwwroot/Upload/*
 !BookCart/wwwroot/Upload/Default_image.jpg
+
+# Production deployment: generated secrets, database backups and published binaries
+deploy/.env
+deploy/backups/
+artifacts/

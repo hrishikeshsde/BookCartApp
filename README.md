@@ -34,7 +34,7 @@ An e-commerce application for an online book store created with ASP.NET Core (.N
 1. Clone the Repo
 2. Create an empty SQL Server database, then create its tables and reference data with the EF Core migrations:
    `dotnet tool restore`, then `BOOKCART_EF_CONNECTION="<your connection string>" dotnet ef database update --project BookCart`.
-   (An existing database created from the old DBScript needs the upgrade steps in [docs/B4_DATABASE_CHANGES.md](docs/B4_DATABASE_CHANGES.md).)
+   (An existing database created from the old DBScript needs the upgrade steps in [docs/BACKEND_CHANGES.md](docs/BACKEND_CHANGES.md) (section B4).)
 3. Set your secrets with [user-secrets](https://learn.microsoft.com/aspnet/core/security/app-secrets) from the `BookCart` folder:
    `dotnet user-secrets set "ConnectionStrings:DefaultConnection" "<your connection string>"` and
    `dotnet user-secrets set "Jwt:SecretKey" "<a random string of at least 32 characters>"`.

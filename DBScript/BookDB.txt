@@ -3,7 +3,7 @@
 --   * New database:       create an empty database, then   dotnet ef database update --project BookCart
 --                         (set BOOKCART_EF_CONNECTION to the connection string). It also inserts the user types and categories.
 --   * Existing database: (created from this script) back it up, run DBScript/B4_adopt_migrations.sql once, then apply the
---                         migrations. See docs/B4_DATABASE_CHANGES.md.
+--                         migrations. See docs/BACKEND_CHANGES.md (section B4).
 --
 -- This script is kept because it is exactly how every existing database was created. The upgrade tests
 -- (BookCart.Tests/ExistingDatabaseTests.cs) run it to prove that such a database ends up identical to a new one.

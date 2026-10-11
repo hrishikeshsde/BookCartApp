@@ -1,4 +1,5 @@
-import { HttpClient, HttpErrorResponse, provideHttpClient, withInterceptors } from "@angular/common/http";
+import type { Mock } from "vitest";
+import { HttpClient, HttpErrorResponse, provideHttpClient, withInterceptors, withXhr } from "@angular/common/http";
 import { HttpTestingController, provideHttpClientTesting } from "@angular/common/http/testing";
 import { TestBed } from "@angular/core/testing";
 import { MockStore, provideMockStore } from "@ngrx/store/testing";
@@ -19,7 +20,7 @@ describe("authTokenInterceptor", () => {
   beforeEach(() => {
     localStorage.removeItem("authToken");
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(withInterceptors([authTokenInterceptor])), provideHttpClientTesting()],
+      providers: [provideHttpClient(withXhr(), withInterceptors([authTokenInterceptor])), provideHttpClientTesting()],
     });
     http = TestBed.inject(HttpTestingController);
     client = TestBed.inject(HttpClient);
@@ -39,13 +40,13 @@ describe("authTokenInterceptor", () => {
 
   it("sends no header when there is no token", () => {
     client.get("/api/book").subscribe();
-    expect(http.expectOne("/api/book").request.headers.has("Authorization")).toBeFalse();
+    expect(http.expectOne("/api/book").request.headers.has("Authorization")).toBe(false);
   });
 
   it("never sends an expired token (and removes it)", () => {
     tokens.set(aToken({ userId: "7", exp: anHourAgo() }));
     client.get("/api/book").subscribe();
-    expect(http.expectOne("/api/book").request.headers.has("Authorization")).toBeFalse();
+    expect(http.expectOne("/api/book").request.headers.has("Authorization")).toBe(false);
     expect(localStorage.getItem("authToken")).toBeNull();
   });
 });
@@ -54,14 +55,14 @@ describe("errorInterceptor", () => {
   let http: HttpTestingController;
   let client: HttpClient;
   let store: MockStore;
-  let dispatch: jasmine.Spy;
+  let dispatch: Mock;
   let snackbar: SnackbarStub;
 
   beforeEach(() => {
     snackbar = new SnackbarStub();
     TestBed.configureTestingModule({
       providers: [
-        provideHttpClient(withInterceptors([errorInterceptor])),
+        provideHttpClient(withXhr(), withInterceptors([errorInterceptor])),
         provideHttpClientTesting(),
         provideMockStore({ selectors: [{ selector: selectIsAuthenticated, value: true }] }),
         { provide: SnackbarService, useValue: snackbar },
@@ -70,14 +71,14 @@ describe("errorInterceptor", () => {
     http = TestBed.inject(HttpTestingController);
     client = TestBed.inject(HttpClient);
     store = TestBed.inject(MockStore);
-    dispatch = spyOn(store, "dispatch");
+    dispatch = vi.spyOn(store, "dispatch");
   });
   afterEach(() => {
     http.verify();
     store.resetSelectors(); // an override is global: it would leak into every later spec
   });
 
-  function fail(url: string, status: number) {
+  function failWith(url: string, status: number) {
     let caught: unknown;
     client.get(url).subscribe({ error: (e) => (caught = e) });
     http.expectOne(url).flush({ title: "problem" }, { status, statusText: "x" });
@@ -85,25 +86,27 @@ describe("errorInterceptor", () => {
   }
 
   it("a 401 ends the session (without reloading the page) and says there was one", () => {
-    fail("/api/wishlist", 401);
-    expect(dispatch).toHaveBeenCalledOnceWith(sessionExpired({ hadSession: true }));
+    failWith("/api/wishlist", 401);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(dispatch).toHaveBeenCalledWith(sessionExpired({ hadSession: true }));
   });
 
   it("a 401 for a guest says there was no session", () => {
     store.overrideSelector(selectIsAuthenticated, false);
     store.refreshState();
-    fail("/api/wishlist", 401);
-    expect(dispatch).toHaveBeenCalledOnceWith(sessionExpired({ hadSession: false }));
+    failWith("/api/wishlist", 401);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(dispatch).toHaveBeenCalledWith(sessionExpired({ hadSession: false }));
   });
 
   it("a 401 from the login call is a wrong password, not an expired session", () => {
-    fail("/api/login", 401);
+    failWith("/api/login", 401);
     expect(dispatch).not.toHaveBeenCalled();
   });
 
   it("a 403 and a server error each get one message", () => {
-    fail("/api/book", 403);
-    fail("/api/book", 500);
+    failWith("/api/book", 403);
+    failWith("/api/book", 500);
     expect(snackbar.messages).toEqual([
       "You do not have permission to do that.",
       "Something went wrong. Please try again.",
@@ -111,14 +114,14 @@ describe("errorInterceptor", () => {
   });
 
   it("a 404 is left to the caller (no redirect, no message)", () => {
-    fail("/api/book/9", 404);
+    failWith("/api/book/9", 404);
     expect(dispatch).not.toHaveBeenCalled();
     expect(snackbar.messages).toEqual([]);
   });
 
   it("passes the original HttpErrorResponse on, status and body intact", () => {
-    const caught = fail("/api/book", 409) as HttpErrorResponse;
-    expect(caught instanceof HttpErrorResponse).toBeTrue();
+    const caught = failWith("/api/book", 409) as HttpErrorResponse;
+    expect(caught instanceof HttpErrorResponse).toBe(true);
     expect(caught.status).toBe(409);
     expect(caught.error).toEqual({ title: "problem" });
   });

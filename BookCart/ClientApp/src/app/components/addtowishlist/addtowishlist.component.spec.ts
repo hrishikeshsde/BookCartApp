@@ -47,7 +47,7 @@ describe("AddtowishlistComponent", () => {
   });
 
   it("clicking asks the store to add, and then to remove", () => {
-    spyOn(store, "dispatch");
+    vi.spyOn(store, "dispatch");
     const button = (fixture.nativeElement as HTMLElement).querySelector("button") as HTMLButtonElement;
 
     button.click();

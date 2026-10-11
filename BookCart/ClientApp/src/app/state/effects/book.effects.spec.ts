@@ -1,4 +1,5 @@
-import { provideHttpClient } from "@angular/common/http";
+import type { Mock } from "vitest";
+import { provideHttpClient, withXhr } from "@angular/common/http";
 import { HttpTestingController, provideHttpClientTesting } from "@angular/common/http/testing";
 import { TestBed } from "@angular/core/testing";
 import { provideRouter, Router } from "@angular/router";
@@ -8,16 +9,7 @@ import { Subject } from "rxjs";
 import { SnackbarService } from "src/app/services/snackbar.service";
 import { aBook } from "src/app/testing/fixtures";
 import { collect, SnackbarStub } from "src/app/testing/helpers";
-import {
-  addBook,
-  addBookSuccess,
-  deleteBook,
-  deleteBookSuccess,
-  loadBooks,
-  loadBooksFailure,
-  loadBooksSuccess,
-  updateBookSuccess,
-} from "../actions/book.actions";
+import { addBook, addBookSuccess, deleteBook, deleteBookSuccess, loadBooks, loadBooksFailure, loadBooksSuccess, updateBookSuccess, } from "../actions/book.actions";
 import { BookEffects } from "./book.effects";
 
 describe("BookEffects", () => {
@@ -25,7 +17,7 @@ describe("BookEffects", () => {
   let effects: BookEffects;
   let http: HttpTestingController;
   let snackbar: SnackbarStub;
-  let navigate: jasmine.Spy;
+  let navigate: Mock;
 
   beforeEach(() => {
     actions$ = new Subject<Action>();
@@ -34,7 +26,7 @@ describe("BookEffects", () => {
       providers: [
         BookEffects,
         provideMockActions(() => actions$),
-        provideHttpClient(),
+        provideHttpClient(withXhr()),
         provideHttpClientTesting(),
         provideRouter([]),
         { provide: SnackbarService, useValue: snackbar },
@@ -42,7 +34,7 @@ describe("BookEffects", () => {
     });
     effects = TestBed.inject(BookEffects);
     http = TestBed.inject(HttpTestingController);
-    navigate = spyOn(TestBed.inject(Router), "navigate").and.resolveTo(true);
+    navigate = vi.spyOn(TestBed.inject(Router), "navigate").mockResolvedValue(true);
   });
   afterEach(() => http.verify());
 

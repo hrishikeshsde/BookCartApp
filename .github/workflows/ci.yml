@@ -69,13 +69,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           cache-dependency-path: BookCart/ClientApp/package-lock.json
-      # .npmrc sets legacy-peer-deps (the @ngrx 19 packages declare Angular 19 as a peer; the app runs Angular 20).
+      # .npmrc sets legacy-peer-deps (Bootstrap peers on @popperjs/core, which the app does not use).
       - run: npm ci
-      # Headless Chrome ships on the runner; the CI launcher turns off its sandbox, which a container cannot use.
-      - run: npx ng test --watch=false --browsers=ChromeHeadlessCI
+      # Vitest runs the specs in jsdom, so no browser is needed.
+      - run: npm test
       - run: npm run build -- --configuration production
 
   container:
@@ -89,7 +89,7 @@ jobs:
           global-json-file: global.json
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
       # Publishing builds the Angular client (npm ci + production build) and writes the image to a tar archive:
       # nothing is pushed anywhere. Load it with `docker load -i bookcart.tar`.
       - name: Build image archive

@@ -1,6 +1,6 @@
-import { provideHttpClient } from "@angular/common/http";
+import { provideHttpClient, withXhr } from "@angular/common/http";
 import { HttpTestingController, provideHttpClientTesting } from "@angular/common/http/testing";
-import { fakeAsync, TestBed, tick } from "@angular/core/testing";
+import { TestBed } from "@angular/core/testing";
 import { FormControl, FormGroup } from "@angular/forms";
 import { Observable } from "rxjs";
 import { CustomValidationService } from "./custom-validation.service";
@@ -10,13 +10,17 @@ describe("CustomValidationService", () => {
   let http: HttpTestingController;
 
   beforeEach(() => {
+    vi.useFakeTimers();
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideHttpClient(withXhr()), provideHttpClientTesting()],
     });
     service = TestBed.inject(CustomValidationService);
     http = TestBed.inject(HttpTestingController);
+  });
+  afterEach(() => {
+    http.verify();
+    vi.useRealTimers();
   });
-  afterEach(() => http.verify());
 
   describe("patternValidator", () => {
     const validate = (value: string) => service.patternValidator()(new FormControl(value));
@@ -55,7 +59,7 @@ describe("CustomValidationService", () => {
     function run(value: string, answer: boolean | "error") {
       let result: unknown = "pending";
       validate(value).subscribe((r) => (result = r));
-      tick(500);
+      vi.advanceTimersByTime(500);
       const request = http.expectOne("/api/user/validateUserName/" + encodeURIComponent(value));
       if (answer === "error") {
         request.flush("", { status: 429, statusText: "Too Many Requests" });
@@ -65,39 +69,39 @@ describe("CustomValidationService", () => {
       return result;
     }
 
-    it("accepts a free name", fakeAsync(() => {
+    it("accepts a free name", () => {
       expect(run("newreader", true)).toBeNull();
-    }));
+    });
 
-    it("flags a taken name", fakeAsync(() => {
+    it("flags a taken name", () => {
       expect(run("taken", false)).toEqual({ userNameNotAvailable: true });
-    }));
+    });
 
-    it("encodes the name in the URL", fakeAsync(() => {
+    it("encodes the name in the URL", () => {
       expect(run("a b/c?", true)).toBeNull();
-    }));
+    });
 
-    it("does not block the form when the lookup fails (the server rejects a taken name anyway)", fakeAsync(() => {
+    it("does not block the form when the lookup fails (the server rejects a taken name anyway)", () => {
       expect(run("whoever", "error")).toBeNull();
-    }));
+    });
 
-    it("waits half a second before asking, and sends nothing if the value changed meanwhile", fakeAsync(() => {
+    it("waits half a second before asking, and sends nothing if the value changed meanwhile", () => {
       let result: unknown = "pending";
       const subscription = validate("abc").subscribe((r) => (result = r));
-      tick(499);
+      vi.advanceTimersByTime(499);
       http.expectNone("/api/user/validateUserName/abc");
       subscription.unsubscribe(); // what Angular does when the control's value changes
-      tick(1000);
+      vi.advanceTimersByTime(1000);
       http.expectNone("/api/user/validateUserName/abc");
       expect(result).toBe("pending");
-    }));
+    });
 
-    it("sends nothing for an empty value", fakeAsync(() => {
+    it("sends nothing for an empty value", () => {
       let result: unknown = "pending";
       validate("").subscribe((r) => (result = r));
-      tick(1000);
+      vi.advanceTimersByTime(1000);
       http.expectNone(() => true);
       expect(result).toBeNull();
-    }));
+    });
   });
 });

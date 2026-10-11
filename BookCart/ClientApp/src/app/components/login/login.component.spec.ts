@@ -1,3 +1,4 @@
+import type { Mock } from "vitest";
 import { ComponentFixture, TestBed } from "@angular/core/testing";
 import { provideRouter } from "@angular/router";
 import { MockStore, provideMockStore } from "@ngrx/store/testing";
@@ -9,7 +10,7 @@ import { LoginComponent } from "./login.component";
 describe("LoginComponent", () => {
   let fixture: ComponentFixture<LoginComponent>;
   let store: MockStore;
-  let dispatch: jasmine.Spy;
+  let dispatch: Mock;
   const root = () => fixture.nativeElement as HTMLElement;
   const input = (name: string) => root().querySelector(`input[formcontrolname="${name}"]`) as HTMLInputElement;
   const type = (name: string, value: string) => {
@@ -25,7 +26,7 @@ describe("LoginComponent", () => {
       providers: [provideRouter([]), provideMockStore({ selectors: [{ selector: selectLoginError, value: null }] })],
     });
     store = TestBed.inject(MockStore);
-    dispatch = spyOn(store, "dispatch");
+    dispatch = vi.spyOn(store, "dispatch");
     fixture = TestBed.createComponent(LoginComponent);
     fixture.detectChanges();
   });
@@ -37,7 +38,7 @@ describe("LoginComponent", () => {
 
   it("does not try to log in with an empty form", () => {
     submit();
-    expect(dispatch).not.toHaveBeenCalledWith(jasmine.objectContaining({ type: login.type }));
+    expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: login.type }));
   });
 
   it("logs in with what was typed", () => {

@@ -1,6 +1,6 @@
 # BookCart
 
-An e-commerce application for an online book store created with ASP.NET Core (.NET 10) and Angular 20, using SQL Server as database.
+An e-commerce application for an online book store created with ASP.NET Core (.NET 10) and Angular 22, using SQL Server as database.
 
 # Concepts Covered
 
@@ -28,7 +28,7 @@ An e-commerce application for an online book store created with ASP.NET Core (.N
 - Visual Studio 2022 17.13 or newer (the solution is `BookCart.slnx`), or any editor with the .NET CLI
 - SQL Server 
 - .NET 10 SDK (pinned in global.json)
-- Node.js 22 or newer for the Angular app
+- Node.js 24.15 or newer (or 22.22.3 or newer 22.x) for the Angular app
 
 # Steps to run the app
 1. Clone the Repo
@@ -40,7 +40,7 @@ An e-commerce application for an online book store created with ASP.NET Core (.N
    `dotnet user-secrets set "Jwt:SecretKey" "<a random string of at least 32 characters>"`.
    Optional, for AI book summaries: `dotnet user-secrets set "Gemini:ApiKey" "<your key>"`.
 4. Run `dotnet run --launch-profile BookCart` from the `BookCart` folder (or launch from Visual Studio). The first Debug build installs the
-   Angular app's packages (`npm ci`; `ClientApp/.npmrc` sets `legacy-peer-deps` because the `@ngrx` 19 packages declare an Angular 19 peer).
+   Angular app's packages (`npm ci`; `ClientApp/.npmrc` sets `legacy-peer-deps` because Bootstrap peers on `@popperjs/core`, which the app does not use).
 5. Register a user in the app, then make them an admin: `UPDATE UserMaster SET UserTypeID = 1 WHERE Username = '<username>'`.
 
 # One-click scripts (Windows)

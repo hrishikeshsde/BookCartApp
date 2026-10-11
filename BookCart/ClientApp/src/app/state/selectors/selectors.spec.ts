@@ -1,11 +1,6 @@
 import { aBook, aCartItem, aUser } from "src/app/testing/fixtures";
 import { selectIsAdmin } from "./auth.selectors";
-import {
-  selectCurrentBookDetails,
-  selectMaxBookPrice,
-  selectMinBookPrice,
-  selectSearchItemValue,
-} from "./book.selectors";
+import { selectCurrentBookDetails, selectMaxBookPrice, selectMinBookPrice, selectSearchItemValue, } from "./book.selectors";
 import { selectCarttemsCount } from "./cart.selectors";
 import { selectWishlistItemsCount } from "./wishlist.selectors";
 
@@ -38,8 +33,8 @@ describe("selectors", () => {
   });
 
   it("admin means the Admin role, nothing else", () => {
-    expect(selectIsAdmin.projector(aUser({ userTypeName: "Admin" }))).toBeTrue();
-    expect(selectIsAdmin.projector(aUser({ userTypeName: "User" }))).toBeFalse();
-    expect(selectIsAdmin.projector(null)).toBeFalse();
+    expect(selectIsAdmin.projector(aUser({ userTypeName: "Admin" }))).toBe(true);
+    expect(selectIsAdmin.projector(aUser({ userTypeName: "User" }))).toBe(false);
+    expect(selectIsAdmin.projector(null)).toBe(false);
   });
 });

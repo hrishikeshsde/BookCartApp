@@ -1,10 +1,3 @@
-import {
-  animate,
-  state,
-  style,
-  transition,
-  trigger,
-} from "@angular/animations";
 import { AsyncPipe, CurrencyPipe, DatePipe } from "@angular/common";
 import {
   ChangeDetectionStrategy,
@@ -54,16 +47,6 @@ import {
   selector: "app-my-orders",
   templateUrl: "./my-orders.component.html",
   styleUrls: ["./my-orders.component.scss"],
-  animations: [
-    trigger("detailExpand", [
-      state("collapsed,void", style({ height: "0px", minHeight: "0" })),
-      state("expanded", style({ height: "*" })),
-      transition(
-        "expanded <=> collapsed",
-        animate("225ms cubic-bezier(0.4, 0.0, 0.2, 1)")
-      ),
-    ]),
-  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     MatCard,

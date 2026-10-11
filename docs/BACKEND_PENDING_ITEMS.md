@@ -41,12 +41,12 @@ Found while doing the backend work. They belong to F0 to F7 and are listed so th
 
 | # | Item | Belongs to |
 |---|---|---|
-| 17 | **Browser smoke test.** The Angular app has been compiled but never clicked through against the final API. First thing to do when frontend work starts. | F0 |
-| 18 | Karma specs are still the old boilerplate (two do not type-check). | F2 |
-| 19 | Initial bundle is 1.08 MB against the 1 MB budget (build warning). | F6 |
+| 17 | ~~Browser smoke test.~~ Done: `scripts/smoke` clicks through the real app (22 steps, run on Angular 20, 21 and 22). | done |
+| 18 | ~~Karma specs are the old boilerplate.~~ Done: 150 Vitest specs (F2, F3.4). | done |
+| 19 | Initial bundle is 1.09 MB against the 1 MB budget (build warning). | F6 |
 | 20 | The catalog still loads every book and filters in the browser; moving it to `GET api/book/search` is a frontend change. | F6 |
 | 21 | An empty-cart checkout answers 409; the SPA did not show that message when last checked (B0 note, not rechecked since B3). | F1 |
-| 22 | Remove `BookCart/ClientApp/.npmrc` (`legacy-peer-deps`) once `@ngrx` is upgraded to match Angular. | F3 |
+| 22 | Remove `BookCart/ClientApp/.npmrc` (`legacy-peer-deps`). NgRx now matches Angular (F3); what still needs it is Bootstrap's `@popperjs/core` peer, so it goes with Bootstrap in F6. | F6 |
 
 ## Working rules
 

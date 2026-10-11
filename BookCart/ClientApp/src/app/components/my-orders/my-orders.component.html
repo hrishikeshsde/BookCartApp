@@ -38,10 +38,9 @@
             >
               <div
                 class="example-element-detail"
-                [@detailExpand]="
-                  element == expandedElement ? 'expanded' : 'collapsed'
-                "
+                [class.expanded]="element === expandedElement"
               >
+                <div class="example-element-detail-inner">
                 <mat-card class="w-100">
                   <mat-card-content>
                     <table class="table mat-elevation-z2 details-table">
@@ -78,6 +77,7 @@
                     </table>
                   </mat-card-content>
                 </mat-card>
+                </div>
               </div>
             </td></ng-container
           >

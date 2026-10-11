@@ -1,4 +1,5 @@
-import { provideHttpClient } from "@angular/common/http";
+import type { Mock } from "vitest";
+import { provideHttpClient, withXhr } from "@angular/common/http";
 import { HttpTestingController, provideHttpClientTesting } from "@angular/common/http/testing";
 import { TestBed } from "@angular/core/testing";
 import { provideRouter, Router } from "@angular/router";
@@ -11,16 +12,7 @@ import { TokenStorage } from "src/app/services/token-storage.service";
 import { INVALID_CREDENTIALS } from "src/app/shared/http-error";
 import { anHourAgo, aToken, inOneHour } from "src/app/testing/fixtures";
 import { collect, SnackbarStub } from "src/app/testing/helpers";
-import {
-  login,
-  loginFailure,
-  loginSuccess,
-  logout,
-  restoreSession,
-  sessionExpired,
-  sessionResolved,
-  setAuthState,
-} from "../actions/auth.actions";
+import { login, loginFailure, loginSuccess, logout, restoreSession, sessionExpired, sessionResolved, setAuthState, } from "../actions/auth.actions";
 import { selectQueryParams } from "../selectors/router.selectors";
 import { AuthEffects } from "./auth.effects";
 
@@ -33,8 +25,8 @@ describe("AuthEffects", () => {
   let http: HttpTestingController;
   let store: MockStore;
   let tokens: TokenStorage;
-  let navigateByUrl: jasmine.Spy;
-  let navigate: jasmine.Spy;
+  let navigateByUrl: Mock;
+  let navigate: Mock;
   let snackbar: SnackbarStub;
 
   beforeEach(() => {
@@ -46,7 +38,7 @@ describe("AuthEffects", () => {
         AuthEffects,
         provideMockActions(() => actions$),
         provideMockStore({ selectors: [{ selector: selectQueryParams, value: {} }] }),
-        provideHttpClient(),
+        provideHttpClient(withXhr()),
         provideHttpClientTesting(),
         provideRouter([]),
         { provide: SnackbarService, useValue: snackbar },
@@ -57,8 +49,8 @@ describe("AuthEffects", () => {
     store = TestBed.inject(MockStore);
     tokens = TestBed.inject(TokenStorage);
     const router = TestBed.inject(Router);
-    navigateByUrl = spyOn(router, "navigateByUrl").and.resolveTo(true);
-    navigate = spyOn(router, "navigate").and.resolveTo(true);
+    navigateByUrl = vi.spyOn(router, "navigateByUrl").mockResolvedValue(true);
+    navigate = vi.spyOn(router, "navigate").mockResolvedValue(true);
   });
   afterEach(() => {
     http.verify();

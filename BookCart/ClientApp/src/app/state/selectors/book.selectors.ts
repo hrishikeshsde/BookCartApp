@@ -4,7 +4,6 @@ import {
   bookAdapter,
   BookState,
 } from "../reducers/book.reducers";
-import { selectRouterParam } from "./router.selectors";
 
 const selectBookFeatureState =
   createFeatureSelector<BookState>(BOOK_FEATURE_KEY);
@@ -15,17 +14,6 @@ export const selectBooks = createSelector(selectBookFeatureState, selectAll);
 const selectBookEntities = createSelector(
   selectBookFeatureState,
   selectEntities
-);
-
-export const selectCurrentBookId = selectRouterParam("id");
-
-export const selectCurrentBookDetails = createSelector(
-  selectBookEntities,
-  selectCurrentBookId,
-  (books, id) => {
-    if (id == null || !books) return undefined;
-    return books[id];
-  }
 );
 
 export const selectBookCallState = createSelector(

@@ -1,65 +1,81 @@
-import type { Mock } from "vitest";
 import { ComponentFixture, TestBed } from "@angular/core/testing";
-import { provideRouter, Router } from "@angular/router";
-import { MockStore, provideMockStore } from "@ngrx/store/testing";
-import { selectBooks, selectSearchItemValue } from "src/app/state/selectors/book.selectors";
-import { aBook } from "src/app/testing/fixtures";
 import { SearchComponent } from "./search.component";
+import { aBook } from "src/app/testing/fixtures";
 
 describe("SearchComponent", () => {
   let fixture: ComponentFixture<SearchComponent>;
   let component: SearchComponent;
-  let store: MockStore;
-  let navigate: Mock;
-  const box = () => (fixture.nativeElement as HTMLElement).querySelector("input.searchbox") as HTMLInputElement;
+  let searched: string[];
+  let cleared: number;
+  const root = () => fixture.nativeElement as HTMLElement;
+  const box = () => root().querySelector("input.searchbox") as HTMLInputElement;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({
-      imports: [SearchComponent],
-      providers: [
-        provideRouter([]),
-        provideMockStore({
-          selectors: [
-            { selector: selectBooks, value: [aBook(1, { title: "Dune" })] },
-            { selector: selectSearchItemValue, value: "" },
-          ],
-        }),
-      ],
-    });
-    store = TestBed.inject(MockStore);
-    navigate = vi.spyOn(TestBed.inject(Router), "navigate").mockResolvedValue(true);
+    TestBed.configureTestingModule({ imports: [SearchComponent] });
     fixture = TestBed.createComponent(SearchComponent);
     component = fixture.componentInstance;
+    searched = [];
+    cleared = 0;
+    component.searched.subscribe((text) => searched.push(text));
+    component.cleared.subscribe(() => cleared++);
+    fixture.componentRef.setInput("books", [
+      aBook(1, { title: "Dune", author: "Frank Herbert" }),
+      aBook(2, { title: "Emma", author: "Jane Austen" }),
+    ]);
     fixture.detectChanges();
   });
-  afterEach(() => store.resetSelectors());
 
+  const type = (text: string) => {
+    box().value = text;
+    box().dispatchEvent(new Event("input"));
+  };
   const pressEnter = () => box().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
   /** Chrome fires "search" on Enter in a type=search box, and on its clear (x) button. */
-  const browserSearchEvent = () => box().dispatchEvent(new Event("search"));
+  const browserSearchEvent = () => box().dispatchEvent(new Event("search", { bubbles: true }));
 
-  it("Enter searches for what was typed, in lower case", () => {
-    component.searchControl.setValue("Dune");
+  it("Enter reports what was typed, in lower case", () => {
+    type("Dune");
     pressEnter();
-    expect(navigate).toHaveBeenCalledWith(["/search"], { queryParams: { item: "dune" } });
+    expect(searched).toEqual(["dune"]);
+    expect(cleared).toBe(0);
   });
 
-  it("Enter in an empty box goes back to the full list", () => {
+  it("Enter in an empty box asks to show everything again", () => {
     pressEnter();
-    expect(navigate).toHaveBeenCalledWith(["/"]);
+    expect(searched).toEqual([]);
+    expect(cleared).toBe(1);
   });
 
   it("the browser's own 'search' event does not undo a search that has text (it used to send the visitor home)", () => {
-    component.searchControl.setValue("Dune");
+    type("Dune");
     pressEnter();
     browserSearchEvent();
-    expect(navigate).toHaveBeenCalledTimes(1);
-    expect(navigate).toHaveBeenCalledWith(["/search"], { queryParams: { item: "dune" } });
+    expect(searched).toEqual(["dune"]);
+    expect(cleared).toBe(0);
   });
 
-  it("clearing the box with its (x) button goes back to the full list", () => {
-    component.searchControl.setValue("");
+  it("clearing the box with its (x) button asks to show everything again", () => {
+    type("");
     browserSearchEvent();
-    expect(navigate).toHaveBeenCalledWith(["/"]);
+    expect(cleared).toBe(1);
+  });
+
+  it("shows the search text it is given", async () => {
+    fixture.componentRef.setInput("searchText", "emma");
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(box().value).toBe("emma");
+  });
+
+  it("suggests the books whose title or author contains what is typed", () => {
+    type("herb");
+    fixture.detectChanges();
+    const suggestions = (component as unknown as { suggestions: () => { title: string }[] }).suggestions();
+    expect(suggestions.map((book) => book.title)).toEqual(["Dune"]);
+  });
+
+  it("suggests nothing for an empty box", () => {
+    const suggestions = (component as unknown as { suggestions: () => unknown[] }).suggestions();
+    expect(suggestions).toEqual([]);
   });
 });

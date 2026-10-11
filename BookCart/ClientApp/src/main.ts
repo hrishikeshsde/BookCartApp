@@ -1,14 +1,14 @@
 import { provideHttpClient, withInterceptors, withXhr } from "@angular/common/http";
-import { isDevMode, provideZoneChangeDetection } from "@angular/core";
+import { isDevMode, provideZonelessChangeDetection } from "@angular/core";
 import { bootstrapApplication } from "@angular/platform-browser";
 import {
   PreloadAllModules,
   provideRouter,
+  withComponentInputBinding,
   withInMemoryScrolling,
   withPreloading,
 } from "@angular/router";
 import { provideEffects } from "@ngrx/effects";
-import { provideRouterStore, routerReducer } from "@ngrx/router-store";
 import { provideState, provideStore } from "@ngrx/store";
 import { provideStoreDevtools } from "@ngrx/store-devtools";
 import { AppComponent } from "./app/app.component";
@@ -40,12 +40,11 @@ import {
   WISHLIST_FEATURE_KEY,
   wishlistReducer,
 } from "./app/state/reducers/wishlist.reducers";
-import { ROUTER_FEATURE_KEY } from "./app/state/selectors/router.selectors";
 
 bootstrapApplication(AppComponent, {
   providers: [
-    // Angular 21 made zoneless the default; this app still relies on zone.js until F4 moves it to signals.
-    provideZoneChangeDetection(),
+    // No zone.js: components are OnPush and change through signals, inputs, events and the async pipe.
+    provideZonelessChangeDetection(),
     // Angular 22 defaults to fetch; XHR keeps the behaviour the app was written and tested with (F6 revisits it).
     provideHttpClient(
       withXhr(),
@@ -53,6 +52,8 @@ bootstrapApplication(AppComponent, {
     ),
     provideRouter(
       APP_ROUTES,
+      // Route and query parameters arrive as component inputs (id, category, item, returnUrl).
+      withComponentInputBinding(),
       withInMemoryScrolling({
         scrollPositionRestoration: "top",
       }),
@@ -70,8 +71,7 @@ bootstrapApplication(AppComponent, {
     provideState(AUTH_FEATURE_KEY, authReducer),
     provideState(WISHLIST_FEATURE_KEY, wishlistReducer),
     provideState(CART_FEATURE_KEY, cartReducer),
-    provideRouterStore(),
-    provideStore({ [ROUTER_FEATURE_KEY]: routerReducer }),
+    provideStore(),
     provideStoreDevtools({ maxAge: 25, logOnly: !isDevMode() }),
   ],
 }).catch((err) => console.error(err));

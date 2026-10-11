@@ -5,7 +5,7 @@
         class="btn-gemini"
         color="primary"
         mat-raised-button
-        (click)="fetchSummary()"
+        (click)="generate.emit()"
       >
         <span
           ><img
@@ -16,14 +16,14 @@
       </button>
     </div>
 
-    @if (showLoader()) {
+    @if (loading()) {
     <div class="d-flex justify-content-center mt-4">
       <mat-spinner diameter="50"></mat-spinner>
     </div>
-    } @else { @if (errorMessage()) {
-    <p class="mt-4">{{ errorMessage() }}</p>
-    } @else if (bookSummary().length > 0) {
-    <p class="mt-4">{{ bookSummary() }}</p>
+    } @else { @if (error()) {
+    <p class="mt-4">{{ error() }}</p>
+    } @else if (summary().length > 0) {
+    <p class="mt-4">{{ summary() }}</p>
     } }
   </mat-card-content>
 </mat-card>

@@ -12,7 +12,12 @@ import { MatMenu, MatMenuItem, MatMenuTrigger } from "@angular/material/menu";
 import { MatToolbar, MatToolbarRow } from "@angular/material/toolbar";
 import { MatTooltip } from "@angular/material/tooltip";
 import { RouterLink, RouterLinkActive } from "@angular/router";
+import { Router } from "@angular/router";
 import { Store } from "@ngrx/store";
+import {
+  selectBooks,
+  selectSearchItemValue,
+} from "src/app/state/selectors/book.selectors";
 import { combineLatest, map } from "rxjs";
 import { logout } from "src/app/state/actions/auth.actions";
 import {
@@ -48,6 +53,7 @@ import { SearchComponent } from "../search/search.component";
 })
 export class NavBarComponent {
   private readonly store = inject(Store);
+  private readonly router = inject(Router);
 
   /** The backend serves its API reference (/scalar) in Development only, so only dev builds link to it. */
   protected readonly showApiDocs = isDevMode();
@@ -67,6 +73,17 @@ export class NavBarComponent {
       };
     })
   );
+
+  protected readonly books = this.store.selectSignal(selectBooks);
+  protected readonly searchText = this.store.selectSignal(selectSearchItemValue);
+
+  searchFor(item: string) {
+    this.router.navigate(["/search"], { queryParams: { item } });
+  }
+
+  showAllBooks() {
+    this.router.navigate(["/"]);
+  }
 
   logout() {
     this.store.dispatch(logout());

@@ -1,47 +1,24 @@
-import { AsyncPipe, LowerCasePipe } from "@angular/common";
+import { LowerCasePipe } from "@angular/common";
 import {
   ChangeDetectionStrategy,
   Component,
-  inject,
-  Input,
+  input,
 } from "@angular/core";
 import { MatDivider } from "@angular/material/divider";
 import { MatListItem, MatListModule } from "@angular/material/list";
 import { RouterLink } from "@angular/router";
-import { Store } from "@ngrx/store";
-import { EMPTY } from "rxjs";
-import { catchError } from "rxjs/operators";
-import { loadCategories } from "src/app/state/actions/categories.actions";
-import { selectCategories } from "src/app/state/selectors/categories.selectors";
+import { Categories } from "src/app/models/categories";
 
+/** The category list beside the books. The current category and the categories come from the page. */
 @Component({
   selector: "app-book-filter",
   templateUrl: "./book-filter.component.html",
   styleUrls: ["./book-filter.component.scss"],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    MatListModule,
-    MatListItem,
-    RouterLink,
-    MatDivider,
-    AsyncPipe,
-    LowerCasePipe,
-  ],
+  imports: [MatListModule, MatListItem, RouterLink, MatDivider, LowerCasePipe],
 })
 export class BookFilterComponent {
-  @Input({ required: true })
-  category!: string;
-
-  private readonly store = inject(Store);
-
-  categories$ = this.store.select(selectCategories).pipe(
-    catchError((error) => {
-      console.log("Error ocurred while fetching category List : ", error);
-      return EMPTY;
-    })
-  );
-
-  constructor() {
-    this.store.dispatch(loadCategories());
-  }
+  /** The selected category, in lower case; empty for "All Categories". */
+  readonly category = input("");
+  readonly categories = input.required<Categories[]>();
 }

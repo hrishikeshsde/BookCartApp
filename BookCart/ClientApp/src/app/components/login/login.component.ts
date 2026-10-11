@@ -1,7 +1,9 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  effect,
   inject,
+  input,
   OnInit,
 } from "@angular/core";
 import {
@@ -19,8 +21,6 @@ import {
 import { MatIcon } from "@angular/material/icon";
 import { MatInput } from "@angular/material/input";
 import { RouterLink } from "@angular/router";
-import { map } from "rxjs/operators";
-import { AsyncPipe } from "@angular/common";
 import { MatButton } from "@angular/material/button";
 import {
   MatCard,
@@ -57,11 +57,13 @@ import { selectLoginError } from "src/app/state/selectors/auth.selectors";
         MatIcon,
         MatSuffix,
         MatCardActions,
-        AsyncPipe,
     ],
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class LoginComponent implements OnInit {
+  /** Where to go after a successful login: the guards put the page the visitor was headed for in the address (?returnUrl=). */
+  readonly returnUrl = input<string>();
+
   private readonly store = inject(Store);
   private readonly formBuilder = inject(NonNullableFormBuilder);
 
@@ -73,15 +75,17 @@ export class LoginComponent implements OnInit {
 
   protected readonly invalidCredentials = INVALID_CREDENTIALS;
 
-  error$ = this.store.select(selectLoginError).pipe(
-    map((error) => {
-      if (error === INVALID_CREDENTIALS) {
+  protected readonly error = this.store.selectSignal(selectLoginError);
+
+  constructor() {
+    // A wrong password empties the form and flags it, so the message below shows until the visitor types again.
+    effect(() => {
+      if (this.error() === INVALID_CREDENTIALS) {
         this.loginForm.reset();
         this.loginForm.setErrors({ invalidCredentials: true });
       }
-      return error;
-    })
-  );
+    });
+  }
 
   ngOnInit(): void {
     this.store.dispatch(resetLoginFormError());
@@ -96,6 +100,7 @@ export class LoginComponent implements OnInit {
       this.store.dispatch(
         login({
           loginCredentials: this.loginForm.value as UserLogin,
+          returnUrl: this.returnUrl(),
         })
       );
     }

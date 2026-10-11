@@ -1,32 +1,39 @@
 <mat-card
   class="book-card mat-elevation-z2"
-  [class.on-book-card-hover]="isActive"
-  (mouseover)="isActive = true"
-  (mouseout)="isActive = false"
+  [class.on-book-card-hover]="isActive()"
+  (mouseover)="isActive.set(true)"
+  (mouseout)="isActive.set(false)"
 >
   <a
-    [routerLink]="['/books/details/', book.bookId]"
-    matTooltip="{{ book.title }}"
+    [routerLink]="['/books/details/', book().bookId]"
+    matTooltip="{{ book().title }}"
     aria-label="Book title"
     ><img
       class="preview-image"
       mat-card-image
-      src="/Upload/{{ book.coverFileName }}"
+      src="/Upload/{{ book().coverFileName }}"
       alt="Book cover image"
     />
   </a>
   <mat-card-content>
-    @if ((isAuthenticatedUser$ | async)) {
+    @if (signedIn()) {
     <div class="favourite mat-elevation-z8">
-      <app-addtowishlist [bookId]="book.bookId"></app-addtowishlist>
+      <app-addtowishlist
+        [bookId]="book().bookId"
+        [wishlisted]="wishlisted()"
+        (toggle)="toggleWishlist.emit($event)"
+      ></app-addtowishlist>
     </div>
     }
     <div class="card-title my-2">
-      <a [routerLink]="['/books/details/', book.bookId]">
-        <strong>{{ book.title }}</strong>
+      <a [routerLink]="['/books/details/', book().bookId]">
+        <strong>{{ book().title }}</strong>
       </a>
     </div>
-    <p>{{ book.price | currency : "INR" }}</p>
-    <app-addtocart [bookId]="book.bookId"></app-addtocart>
+    <p>{{ book().price | currency : "INR" }}</p>
+    <app-addtocart
+      [bookId]="book().bookId"
+      (add)="addToCart.emit($event)"
+    ></app-addtocart>
   </mat-card-content>
 </mat-card>

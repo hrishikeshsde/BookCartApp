@@ -6,7 +6,12 @@
       </button>
     </div>
     <div>
-      <app-search></app-search>
+      <app-search
+        [books]="books()"
+        [searchText]="searchText()"
+        (searched)="searchFor($event)"
+        (cleared)="showAllBooks()"
+      ></app-search>
     </div>
     <div class="d-flex align-items-center">
       @if (userState$ | async; as userState) { @if (userState.isAuthenticated) {

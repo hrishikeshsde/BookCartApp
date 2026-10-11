@@ -1,9 +1,9 @@
-import { AsyncPipe, CurrencyPipe } from "@angular/common";
+import { CurrencyPipe } from "@angular/common";
 import {
   ChangeDetectionStrategy,
   Component,
-  OnDestroy,
-  inject,
+  input,
+  output,
 } from "@angular/core";
 import { FormsModule, ReactiveFormsModule } from "@angular/forms";
 import {
@@ -13,44 +13,30 @@ import {
   MatCardTitle,
 } from "@angular/material/card";
 import { MatSlider, MatSliderThumb } from "@angular/material/slider";
-import { Store } from "@ngrx/store";
-import { combineLatest, map } from "rxjs";
-import { SubscriptionService } from "src/app/services/subscription.service";
-import {
-  selectMaxBookPrice,
-  selectMinBookPrice,
-} from "src/app/state/selectors/book.selectors";
+import { PriceRange } from "src/app/models/price-range";
 
+/** The price slider. It is told the ends of the range and reports the price the visitor chose. */
 @Component({
-    selector: "app-price-filter",
-    templateUrl: "./price-filter.component.html",
-    styleUrls: ["./price-filter.component.scss"],
-    changeDetection: ChangeDetectionStrategy.OnPush,
-    imports: [
-        MatCard,
-        MatCardHeader,
-        MatCardTitle,
-        MatCardContent,
-        MatSlider,
-        MatSliderThumb,
-        ReactiveFormsModule,
-        FormsModule,
-        CurrencyPipe,
-        AsyncPipe,
-    ]
+  selector: "app-price-filter",
+  templateUrl: "./price-filter.component.html",
+  styleUrls: ["./price-filter.component.scss"],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [
+    MatCard,
+    MatCardHeader,
+    MatCardTitle,
+    MatCardContent,
+    MatSlider,
+    MatSliderThumb,
+    ReactiveFormsModule,
+    FormsModule,
+    CurrencyPipe,
+  ],
 })
-export class PriceFilterComponent implements OnDestroy {
-  private readonly subscriptionService = inject(SubscriptionService);
-  private readonly store = inject(Store);
-
-  bookPriceRange$ = combineLatest([
-    this.store.select(selectMinBookPrice),
-    this.store.select(selectMaxBookPrice),
-  ]).pipe(
-    map(([minPrice, maxPrice]) => {
-      return { minPrice, maxPrice };
-    })
-  );
+export class PriceFilterComponent {
+  /** The cheapest and dearest book; null while there are no books to filter. */
+  readonly range = input<PriceRange | null>(null);
+  readonly priceChange = output<number>();
 
   formatLabel(labelValue: number): string {
     if (labelValue >= 1000) {
@@ -60,12 +46,6 @@ export class PriceFilterComponent implements OnDestroy {
   }
 
   onChange(event: Event) {
-    this.subscriptionService.priceFilterValue$.next(
-      Number((event.target as HTMLInputElement).value)
-    );
-  }
-
-  ngOnDestroy(): void {
-    this.subscriptionService.priceFilterValue$.next(Number.MAX_SAFE_INTEGER);
+    this.priceChange.emit(Number((event.target as HTMLInputElement).value));
   }
 }

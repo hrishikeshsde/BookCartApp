@@ -9,7 +9,7 @@
         <button mat-raised-button [routerLink]="['/register']">Register</button>
       </div>
     </mat-card-header>
-    @if (error$ | async; as error) {
+    @if (error(); as error) {
       @if (error === invalidCredentials) {
         @if (loginForm.errors) {
     <mat-card-header>

@@ -2,7 +2,8 @@ import { createAction, props } from "@ngrx/store";
 import { Book } from "src/app/models/book";
 
 export const loadSimilarBooks = createAction(
-  "[SimilarBooks] Load Similar Books"
+  "[SimilarBooks] Load Similar Books",
+  props<{ bookId: number }>()
 );
 
 export const loadSimilarBooksSuccess = createAction(

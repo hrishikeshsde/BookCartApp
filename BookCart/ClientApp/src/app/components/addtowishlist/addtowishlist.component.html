@@ -1,17 +1,17 @@
-@if (showButton) {
+@if (showButton()) {
 <button
-  [ngClass]="{ wishlisted: toggle, 'not-wishlisted': !toggle }"
+  [ngClass]="{ wishlisted: selected(), 'not-wishlisted': !selected() }"
   mat-raised-button
   (click)="toggleValue()"
 >
-  {{ buttonText }}
+  {{ buttonText() }}
 </button>
 } @else {
 <span
   (click)="toggleValue()"
   [ngClass]="{
-    'favourite-selected': toggle,
-    'favourite-unselected': !toggle
+    'favourite-selected': selected(),
+    'favourite-unselected': !selected()
   }"
   class="material-icons"
 >

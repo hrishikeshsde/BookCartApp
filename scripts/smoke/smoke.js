@@ -169,6 +169,17 @@ async function uiLogin(page, u) {
     await waitFn(page, () => location.pathname === '/myorders');
     await waitFn(page, () => document.querySelectorAll('table tbody tr').length >= 1);
   });
+  await step('My Orders: a row opens to show its books, and closes again', async () => {
+    await page.goto(WEB + '/myorders', { waitUntil: 'networkidle2' });
+    await page.waitForSelector('tr.example-element-row');
+    const open = () => page.waitForFunction(() => { const d = document.querySelector('.example-element-detail-inner'); return d.getBoundingClientRect().height > 20 && getComputedStyle(d).visibility === 'visible'; }, { timeout: 15000 });
+    const shut = () => page.waitForFunction(() => { const d = document.querySelector('.example-element-detail-inner'); return d.getBoundingClientRect().height < 2 && getComputedStyle(d).visibility === 'hidden'; }, { timeout: 15000 });
+    await shut();                                   // closed to begin with
+    await page.click('tr.example-element-row');
+    await open();
+    await page.click('tr.example-element-row');
+    await shut();
+  });
   await step('wishlist: add from the home page and see it on /wishlist', async () => {
     await page.goto(WEB, { waitUntil: 'networkidle2' });
     await page.waitForSelector('app-addtowishlist .favourite-unselected');

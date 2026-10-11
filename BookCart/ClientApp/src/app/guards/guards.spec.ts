@@ -1,12 +1,5 @@
 import { TestBed } from "@angular/core/testing";
-import {
-  ActivatedRouteSnapshot,
-  provideRouter,
-  Router,
-  RouterStateSnapshot,
-  UrlSegment,
-  UrlTree,
-} from "@angular/router";
+import { ActivatedRouteSnapshot, PartialMatchRouteSnapshot, provideRouter, Router, RouterStateSnapshot, UrlSegment, UrlTree, } from "@angular/router";
 import { provideStore, Store } from "@ngrx/store";
 import { Observable } from "rxjs";
 import { logout, sessionResolved, setAuthState } from "../state/actions/auth.actions";
@@ -29,19 +22,15 @@ describe("route guards", () => {
     router = TestBed.inject(Router);
   });
 
-  const runAuthGuard = (url: string) =>
-    TestBed.runInInjectionContext(() =>
-      authGuard({} as ActivatedRouteSnapshot, { url } as RouterStateSnapshot)
-    ) as Observable<Outcome>;
+  const runAuthGuard = (url: string) => TestBed.runInInjectionContext(() => authGuard({} as ActivatedRouteSnapshot, { url } as RouterStateSnapshot)) as Observable<Outcome>;
 
-  const runAdminGuard = () =>
-    TestBed.runInInjectionContext(() =>
-      adminGuard({}, [new UrlSegment("admin", {}), new UrlSegment("books", {})])
-    ) as Observable<Outcome>;
+  const runAdminGuard = () => TestBed.runInInjectionContext(() => adminGuard({}, [new UrlSegment("admin", {}), new UrlSegment("books", {})], {} as PartialMatchRouteSnapshot)) as Observable<Outcome>;
 
   /** Subscribes and returns what the guard has decided so far (nothing yet means it is still waiting). */
   function decision(guard: Observable<Outcome>) {
-    const result: { value?: Outcome } = {};
+    const result: {
+      value?: Outcome;
+    } = {};
     guard.subscribe((outcome) => (result.value = outcome));
     return result;
   }
@@ -56,7 +45,7 @@ describe("route guards", () => {
     it("lets a signed-in visitor through, as soon as that is known", () => {
       const result = decision(runAuthGuard("/wishlist"));
       store.dispatch(setAuthState({ user: aUser() }));
-      expect(result.value).toBeTrue();
+      expect(result.value).toBe(true);
     });
 
     it("sends a guest to login and remembers where they were going", () => {
@@ -79,7 +68,7 @@ describe("route guards", () => {
 
     it("lets an admin through", () => {
       store.dispatch(setAuthState({ user: aUser({ userTypeName: "Admin" }) }));
-      expect(decision(runAdminGuard()).value).toBeTrue();
+      expect(decision(runAdminGuard()).value).toBe(true);
     });
 
     it("sends a signed-in non-admin home", () => {

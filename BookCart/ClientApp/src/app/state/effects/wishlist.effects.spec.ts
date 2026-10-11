@@ -1,4 +1,4 @@
-import { provideHttpClient } from "@angular/common/http";
+import { provideHttpClient, withXhr } from "@angular/common/http";
 import { HttpTestingController, provideHttpClientTesting } from "@angular/common/http/testing";
 import { TestBed } from "@angular/core/testing";
 import { provideMockActions } from "@ngrx/effects/testing";
@@ -36,7 +36,7 @@ describe("WishlistEffects", () => {
         WishlistEffects,
         provideMockActions(() => actions$),
         provideMockStore({ selectors: [{ selector: selectAuthenticatedUser, value: aUser() }] }),
-        provideHttpClient(),
+        provideHttpClient(withXhr()),
         provideHttpClientTesting(),
         { provide: SnackbarService, useValue: snackbar },
       ],

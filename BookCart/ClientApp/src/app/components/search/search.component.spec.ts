@@ -1,3 +1,4 @@
+import type { Mock } from "vitest";
 import { ComponentFixture, TestBed } from "@angular/core/testing";
 import { provideRouter, Router } from "@angular/router";
 import { MockStore, provideMockStore } from "@ngrx/store/testing";
@@ -9,7 +10,7 @@ describe("SearchComponent", () => {
   let fixture: ComponentFixture<SearchComponent>;
   let component: SearchComponent;
   let store: MockStore;
-  let navigate: jasmine.Spy;
+  let navigate: Mock;
   const box = () => (fixture.nativeElement as HTMLElement).querySelector("input.searchbox") as HTMLInputElement;
 
   beforeEach(() => {
@@ -26,7 +27,7 @@ describe("SearchComponent", () => {
       ],
     });
     store = TestBed.inject(MockStore);
-    navigate = spyOn(TestBed.inject(Router), "navigate").and.resolveTo(true);
+    navigate = vi.spyOn(TestBed.inject(Router), "navigate").mockResolvedValue(true);
     fixture = TestBed.createComponent(SearchComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

@@ -24,7 +24,7 @@
             "polyfills": ["src/polyfills.ts"],
             "tsConfig": "tsconfig.app.json",
             "inlineStyleLanguage": "scss",
-            "assets": ["src/favicon.ico", "src/assets"],
+            "assets": ["src/favicon.ico"],
             "styles": [
               {
                 "input": "src/styles.scss",
@@ -65,6 +65,23 @@
               "extractLicenses": false,
               "sourceMap": true,
               "namedChunks": true
+            },
+            "testing": {
+              "aot": false,
+              "optimization": false,
+              "extractLicenses": false,
+              "styles": [
+                "@angular/material/prebuilt-themes/indigo-pink.css",
+                "@fontsource/roboto/300.css",
+                "@fontsource/roboto/400.css",
+                "@fontsource/roboto/500.css",
+                "@fontsource/material-icons/index.css",
+                "src/styles.scss"
+              ],
+              "polyfills": [
+                "zone.js",
+                "zone.js/testing"
+              ]
             }
           },
           "defaultConfiguration": "production"
@@ -89,22 +106,18 @@
           }
         },
         "test": {
-          "builder": "@angular/build:karma",
+          "builder": "@angular/build:unit-test",
           "options": {
-            "polyfills": ["zone.js", "zone.js/testing"],
             "tsConfig": "tsconfig.spec.json",
-            "karmaConfig": "karma.conf.js",
-            "inlineStyleLanguage": "scss",
-            "assets": ["src/favicon.ico", "src/assets"],
-            "styles": [
-              "@angular/material/prebuilt-themes/indigo-pink.css",
-              "@fontsource/roboto/300.css",
-              "@fontsource/roboto/400.css",
-              "@fontsource/roboto/500.css",
-              "@fontsource/material-icons/index.css",
-              "src/styles.scss"
+            "reporters": [
+              "default"
             ],
-            "scripts": []
+            "coverageReporters": [
+              "html",
+              "text-summary"
+            ],
+            "buildTarget": ":build:testing",
+            "runner": "vitest"
           }
         }
       }

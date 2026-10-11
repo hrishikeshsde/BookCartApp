@@ -1,4 +1,4 @@
-import { Component, inject } from "@angular/core";
+import { Component, inject, ChangeDetectionStrategy } from "@angular/core";
 import { RouterOutlet } from "@angular/router";
 import { Store } from "@ngrx/store";
 import { NavBarComponent } from "./components/nav-bar/nav-bar.component";
@@ -9,6 +9,7 @@ import { loadCart } from "./state/actions/cart.actions";
     selector: "app-root",
     templateUrl: "./app.component.html",
     styleUrls: ["./app.component.scss"],
+    changeDetection: ChangeDetectionStrategy.Eager,
     imports: [NavBarComponent, RouterOutlet]
 })
 export class AppComponent {

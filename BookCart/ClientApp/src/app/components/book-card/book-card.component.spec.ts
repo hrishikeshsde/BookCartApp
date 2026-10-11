@@ -45,9 +45,10 @@ describe("BookCardComponent", () => {
   });
 
   it("adding to the cart asks the store to add this book", () => {
-    spyOn(store, "dispatch");
+    vi.spyOn(store, "dispatch");
     (element().querySelector("app-addtocart button") as HTMLButtonElement).click();
-    expect(store.dispatch).toHaveBeenCalledOnceWith(addToCart({ bookId: 3 }));
+    expect(store.dispatch).toHaveBeenCalledTimes(1);
+    expect(store.dispatch).toHaveBeenCalledWith(addToCart({ bookId: 3 }));
   });
 
   it("offers the wishlist heart only to signed-in visitors", () => {

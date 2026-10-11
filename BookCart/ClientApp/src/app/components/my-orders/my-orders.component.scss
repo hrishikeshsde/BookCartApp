@@ -20,9 +20,35 @@ tr.example-element-row:not(.example-expanded-row):hover {
   border-bottom-width: 0;
 }
 
+// The row opens and closes by animating the height of its single grid row between 0 and its content (it replaces the
+// Angular animation that did the same). Collapsed content is also hidden from the keyboard and screen readers.
 .example-element-detail {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 225ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.example-element-detail.expanded {
+  grid-template-rows: 1fr;
+}
+
+.example-element-detail-inner {
+  min-height: 0;
   overflow: hidden;
-  display: flex;
+  visibility: hidden;
+  transition: visibility 0s linear 225ms;
+}
+
+.example-element-detail.expanded .example-element-detail-inner {
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .example-element-detail,
+  .example-element-detail-inner {
+    transition: none;
+  }
 }
 
 .details-table {

@@ -4,14 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-BookCart is an online book store: an ASP.NET Core Web API (.NET 10, EF Core 10, SQL Server) in `BookCart/` hosting an Angular 20 SPA in `BookCart/ClientApp/`. Both live in one project (`BookCart.csproj`) wired together with `Microsoft.AspNetCore.SpaProxy`.
+BookCart is an online book store: an ASP.NET Core Web API (.NET 10, EF Core 10, SQL Server) in `BookCart/` hosting an Angular 22 SPA in `BookCart/ClientApp/`. Both live in one project (`BookCart.csproj`) wired together with `Microsoft.AspNetCore.SpaProxy`.
 
 ## Commands
 
 Build layout: the solution is `BookCart.slnx` at the repo root (Visual Studio 2022 17.13+ or the CLI). `global.json` pins the .NET SDK (10.0.x). `.editorconfig` records the code style; `dotnet format BookCart.slnx --verify-no-changes` must stay clean (CI runs it). `Directory.Build.props` sets `TargetFramework` (net10.0), nullable and implicit usings for every project. `Directory.Packages.props` holds all NuGet versions (central package management): project files reference packages without a `Version`, so change versions there.
 
 Backend (run from `BookCart/`):
-- `dotnet build`: the first Debug build runs `npm ci` in `ClientApp/` automatically if `node_modules` is missing. `ClientApp/.npmrc` sets `legacy-peer-deps` (the `@ngrx/*` 19 packages declare an Angular 19 peer; the app runs Angular 20), so a plain `npm install` or `npm ci` works. Remove it when ngrx is upgraded.
+- `dotnet build`: the first Debug build runs `npm ci` in `ClientApp/` automatically if `node_modules` is missing. `ClientApp/.npmrc` sets `legacy-peer-deps` (Bootstrap peers on `@popperjs/core`, which this app does not use); delete it when Bootstrap is removed in F6.
 - `dotnet run --launch-profile BookCart`: starts the API at https://localhost:7073. SpaProxy then runs `npm start` and serves the Angular dev server at https://localhost:53424.
 - `dotnet publish -c Release`: the `PublishBuildClient` target runs `npm ci` and `npm run build -- --configuration production`, then copies `dist/` into `wwwroot` (without `prerendered-routes.json`; the XML documentation file is not published either).
 - One-click Windows scripts are in `scripts/` (`dev-start-all.bat` for development with SQL Server in Docker, `release.bat` for a production release with Docker Compose from `deploy/`; see README). Publish `BookCart/BookCart.csproj` explicitly: a solution-level publish also builds the test project.
@@ -20,12 +20,12 @@ Backend (run from `BookCart/`):
 Frontend (run from `BookCart/ClientApp/`):
 - `npm start`: runs `ng serve` on port 53424 over HTTPS, using the ASP.NET dev cert (the `prestart` step runs `aspnetcore-https.js` to generate it).
 - `npm run build`
-- `npm test`: runs the Karma/Jasmine unit tests once in headless Chrome (`npm run test:watch` keeps a visible Chrome open). To run one spec file: `npx ng test --watch=false --include src/app/services/token-storage.service.spec.ts`. A spec that uses `provideMockStore` selector overrides must call `store.resetSelectors()` in `afterEach`: overrides are global and leak into other specs otherwise.
+- `npm test`: runs the Vitest unit tests once in jsdom (no browser; `npm run test:watch` re-runs on change). To run one spec file: `npm test -- --include src/app/services/token-storage.service.spec.ts`. Use Vitest's `vi.useFakeTimers()` for time, not `fakeAsync` (it needs a zone ProxyZone that Vitest does not set up). A spec that uses `provideMockStore` selector overrides must call `store.resetSelectors()` in `afterEach`: overrides are global and leak into other specs otherwise.
 - `scripts/smoke` is a Chrome click-through of the real app (browse, guest cart, register, login, checkout, wishlist, admin, session expiry); see `docs/FRONTEND_CHANGES.md` for how to run it.
 
 Backend tests (run from the repo root): `dotnet test BookCart.Tests -c Release`. Prefer `-c Release`: a Debug build of `BookCart` also installs the client's packages, which the tests do not need. The tests host the real API on a throwaway LocalDB database `BookDB_Test` that `ApiFactory` drops and rebuilds with the real migrations on every run; the migration/upgrade/schema tests use further scratch databases (`BookDB_Test_*`, dropped afterwards). Set `BOOKCART_TEST_DB` to use another SQL Server, and never point it at a real database.
 
-There is no frontend lint configuration. CI (`.github/workflows/ci.yml`) runs the format check, a warnings-as-errors build and the tests against a SQL Server container (`BOOKCART_TEST_DB`), the Angular unit tests (headless Chrome) and production build, and builds the image archive.
+There is no frontend lint configuration. CI (`.github/workflows/ci.yml`) runs the format check, a warnings-as-errors build and the tests against a SQL Server container (`BOOKCART_TEST_DB`), the Angular unit tests (Vitest) and production build, and builds the image archive.
 
 ## Setup prerequisites
 
@@ -58,7 +58,7 @@ There is no frontend lint configuration. CI (`.github/workflows/ci.yml`) runs th
 
 ### Frontend (`BookCart/ClientApp/src/app/`)
 
-- The app is all standalone components with no NgModules. `main.ts` bootstraps with `provideRouter`, `provideHttpClient(withInterceptors(...))`, and NgRx.
+- The app is all standalone components with no NgModules. `main.ts` bootstraps with `provideRouter`, `provideHttpClient(withXhr(), withInterceptors(...))`, and NgRx. It still runs on zone.js (`provideZoneChangeDetection()`; `AppComponent` and the wishlist button are pinned to `ChangeDetectionStrategy.Eager`) and on XHR instead of Angular 22's fetch default, both to keep behaviour unchanged until F4 and F6.
 - Services call relative URLs (`/api/...`) and never send a user id: the server knows the caller from the JWT or the guest cookie. In development, `proxy.conf.js` forwards `/api`, `/Upload`, `/openapi` and `/scalar` to the ASP.NET backend.
 - The login token is read and written only by `services/token-storage.service.ts` (`TokenStorage`): a malformed or expired token counts as no token, and it builds the signed-in `User` from the JWT payload. `authTokenInterceptor` adds the Bearer header from it. `errorInterceptor` always passes the original `HttpErrorResponse` on; a 401 (except from `/api/login`) dispatches `sessionExpired` (token removed, user/cart/wishlist/orders state reset, back to login with a `returnUrl`; never a page reload), 403 and 5xx show a snackbar. Effects store failures with `errorText(error)` (`shared/http-error.ts`), never the raw error. `returnUrl` goes through `safeReturnUrl` (`shared/return-url.ts`).
 - At start `AppComponent` dispatches `restoreSession`: a valid stored token sets the user, otherwise `sessionResolved`. The auth state's `authResolved` flag tells the route guards when the token has been looked at.
@@ -69,4 +69,4 @@ There is no frontend lint configuration. CI (`.github/workflows/ci.yml`) runs th
   - Reducers track request status with `CallState` from `shared/call-state.ts` (`LoadingState` or `{ errorMessage }`).
 - Routes: all pages except Home are lazy-loaded with `loadComponent`. `authGuard` (a `CanActivateFn`) protects checkout, myorders and wishlist; `adminGuard` (a `CanMatchFn`) protects `admin/books`, whose child routes are in `routes/admin.routes.ts`. Both wait for `authResolved` and return a `UrlTree`: a guest goes to `/login?returnUrl=...`, a signed-in non-admin goes home.
 - `SubscriptionService` keeps one piece of state outside NgRx: the price-filter value, held in a `BehaviorSubject`.
-- Path imports use the `src/app/...` form, resolved through `baseUrl` in tsconfig. TypeScript is `strict`; models are interfaces; fonts and icons are self-hosted (`@fontsource/roboto`, `@fontsource/material-icons`), nothing is loaded from a CDN.
+- Path imports use the `src/app/...` form, resolved through `paths` in tsconfig (TypeScript 6 deprecates `baseUrl`). TypeScript is `strict`; models are interfaces; fonts and icons are self-hosted (`@fontsource/roboto`, `@fontsource/material-icons`), nothing is loaded from a CDN.

@@ -1,5 +1,5 @@
 import { NgClass } from "@angular/common";
-import { Component, inject, Input, OnChanges } from "@angular/core";
+import { Component, inject, Input, OnChanges, ChangeDetectionStrategy } from "@angular/core";
 import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { MatButton } from "@angular/material/button";
 import { Store } from "@ngrx/store";
@@ -11,6 +11,7 @@ import { selectWishlistItems } from "src/app/state/selectors/wishlist.selectors"
     selector: "app-addtowishlist",
     templateUrl: "./addtowishlist.component.html",
     styleUrls: ["./addtowishlist.component.scss"],
+    changeDetection: ChangeDetectionStrategy.Eager,
     imports: [MatButton, NgClass]
 })
 export class AddtowishlistComponent implements OnChanges {

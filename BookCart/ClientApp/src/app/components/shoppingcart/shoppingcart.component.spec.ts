@@ -1,14 +1,9 @@
+import type { Mock } from "vitest";
 import { ComponentFixture, TestBed } from "@angular/core/testing";
 import { provideRouter } from "@angular/router";
 import { MockStore, provideMockStore } from "@ngrx/store/testing";
 import { LoadingState } from "src/app/shared/call-state";
-import {
-  addToCart,
-  clearCart,
-  loadCart,
-  reduceCartQuantity,
-  removeCartItem,
-} from "src/app/state/actions/cart.actions";
+import { addToCart, clearCart, loadCart, reduceCartQuantity, removeCartItem, } from "src/app/state/actions/cart.actions";
 import { selectCartCallState, selectCartItems } from "src/app/state/selectors/cart.selectors";
 import { aCartItem } from "src/app/testing/fixtures";
 import { ShoppingcartComponent } from "./shoppingcart.component";
@@ -16,10 +11,9 @@ import { ShoppingcartComponent } from "./shoppingcart.component";
 describe("ShoppingcartComponent", () => {
   let fixture: ComponentFixture<ShoppingcartComponent>;
   let store: MockStore;
-  let dispatch: jasmine.Spy;
+  let dispatch: Mock;
   const root = () => fixture.nativeElement as HTMLElement;
-  const buttonWithIcon = (icon: string) =>
-    Array.from(root().querySelectorAll("button")).find((b) => b.textContent?.trim() === icon) as HTMLButtonElement;
+  const buttonWithIcon = (icon: string) => Array.from(root().querySelectorAll("button")).find((b) => b.textContent?.trim() === icon) as HTMLButtonElement;
 
   beforeEach(() => {
     TestBed.configureTestingModule({
@@ -35,7 +29,7 @@ describe("ShoppingcartComponent", () => {
       ],
     });
     store = TestBed.inject(MockStore);
-    dispatch = spyOn(store, "dispatch");
+    dispatch = vi.spyOn(store, "dispatch");
     fixture = TestBed.createComponent(ShoppingcartComponent);
     fixture.detectChanges();
   });

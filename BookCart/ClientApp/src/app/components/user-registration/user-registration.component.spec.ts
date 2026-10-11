@@ -1,6 +1,7 @@
-import { provideHttpClient } from "@angular/common/http";
+import type { Mock } from "vitest";
+import { provideHttpClient, withXhr } from "@angular/common/http";
 import { HttpTestingController, provideHttpClientTesting } from "@angular/common/http/testing";
-import { ComponentFixture, fakeAsync, TestBed, tick } from "@angular/core/testing";
+import { ComponentFixture, TestBed } from "@angular/core/testing";
 import { provideRouter } from "@angular/router";
 import { MockStore, provideMockStore } from "@ngrx/store/testing";
 import { register } from "src/app/state/actions/auth.actions";
@@ -19,57 +20,62 @@ describe("UserRegistrationComponent", () => {
   let fixture: ComponentFixture<UserRegistrationComponent>;
   let component: UserRegistrationComponent;
   let http: HttpTestingController;
-  let dispatch: jasmine.Spy;
+  let dispatch: Mock;
 
   beforeEach(() => {
+
+    vi.useFakeTimers();
     TestBed.configureTestingModule({
       imports: [UserRegistrationComponent],
-      providers: [provideRouter([]), provideMockStore(), provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideRouter([]), provideMockStore(), provideHttpClient(withXhr()), provideHttpClientTesting()],
     });
     http = TestBed.inject(HttpTestingController);
-    dispatch = spyOn(TestBed.inject(MockStore), "dispatch");
+    dispatch = vi.spyOn(TestBed.inject(MockStore), "dispatch");
     fixture = TestBed.createComponent(UserRegistrationComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
   });
-  afterEach(() => http.verify());
+  afterEach(() => {
+    http.verify();
+    vi.useRealTimers();
+  });
 
   /** Fills the form and lets the user-name availability check (half a second, then one request) finish. */
   function fill(values: Partial<typeof valid>, nameIsFree = true) {
     component.registrationForm.setValue({ ...valid, ...values });
-    tick(500);
+    vi.advanceTimersByTime(500);
     const name = values.userName ?? valid.userName;
     http.expectOne("/api/user/validateUserName/" + encodeURIComponent(name)).flush(nameIsFree);
   }
 
-  it("a complete, valid form is registered with exactly what was typed", fakeAsync(() => {
+  it("a complete, valid form is registered with exactly what was typed", () => {
     fill({});
-    expect(component.registrationForm.valid).toBeTrue();
+    expect(component.registrationForm.valid).toBe(true);
     component.registerUser();
-    expect(dispatch).toHaveBeenCalledWith(register({ userdetails: jasmine.objectContaining({ firstName: "Ada", password: "Abcdefg1" }) as never }));
-  }));
+    expect(dispatch).toHaveBeenCalledWith(register({ userdetails: expect.objectContaining({ firstName: "Ada", password: "Abcdefg1" }) as never }));
+  });
 
-  it("a taken user name blocks the form", fakeAsync(() => {
+  it("a taken user name blocks the form", () => {
     fill({}, false);
     expect(component.registrationForm.controls.userName.errors).toEqual({ userNameNotAvailable: true });
     component.registerUser();
     expect(dispatch).not.toHaveBeenCalled();
-  }));
+  });
 
-  it("a weak password blocks the form", fakeAsync(() => {
+  it("a weak password blocks the form", () => {
     fill({ password: "abcdefgh", confirmPassword: "abcdefgh" });
     expect(component.registrationForm.controls.password.errors).toEqual({ passwordValidation: true });
-    expect(component.registrationForm.valid).toBeFalse();
-  }));
+    expect(component.registrationForm.valid).toBe(false);
+  });
 
-  it("a confirmation that differs blocks the form", fakeAsync(() => {
+  it("a confirmation that differs blocks the form", () => {
     fill({ confirmPassword: "Different1" });
     expect(component.registrationForm.controls.confirmPassword.errors).toEqual({ passwordMismatch: true });
-    expect(component.registrationForm.valid).toBeFalse();
-  }));
+    expect(component.registrationForm.valid).toBe(false);
+  });
 
-  it("does not ask the server anything until a name is typed", fakeAsync(() => {
-    tick(1000);
+  it("does not ask the server anything until a name is typed", () => {
+    vi.advanceTimersByTime(1000);
     http.expectNone(() => true);
-  }));
+  });
 });

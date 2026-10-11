@@ -1,7 +1,6 @@
-import { provideHttpClient, withInterceptors } from "@angular/common/http";
-import { isDevMode } from "@angular/core";
+import { provideHttpClient, withInterceptors, withXhr } from "@angular/common/http";
+import { isDevMode, provideZoneChangeDetection } from "@angular/core";
 import { bootstrapApplication } from "@angular/platform-browser";
-import { provideAnimations } from "@angular/platform-browser/animations";
 import {
   PreloadAllModules,
   provideRouter,
@@ -45,10 +44,13 @@ import { ROUTER_FEATURE_KEY } from "./app/state/selectors/router.selectors";
 
 bootstrapApplication(AppComponent, {
   providers: [
+    // Angular 21 made zoneless the default; this app still relies on zone.js until F4 moves it to signals.
+    provideZoneChangeDetection(),
+    // Angular 22 defaults to fetch; XHR keeps the behaviour the app was written and tested with (F6 revisits it).
     provideHttpClient(
+      withXhr(),
       withInterceptors([authTokenInterceptor, errorInterceptor])
     ),
-    provideAnimations(),
     provideRouter(
       APP_ROUTES,
       withInMemoryScrolling({

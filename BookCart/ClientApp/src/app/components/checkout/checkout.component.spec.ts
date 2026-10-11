@@ -1,3 +1,4 @@
+import type { Mock } from "vitest";
 import { ComponentFixture, TestBed } from "@angular/core/testing";
 import { provideRouter } from "@angular/router";
 import { MockStore, provideMockStore } from "@ngrx/store/testing";
@@ -13,7 +14,7 @@ describe("CheckoutComponent", () => {
   let fixture: ComponentFixture<CheckoutComponent>;
   let component: CheckoutComponent;
   let store: MockStore;
-  let dispatch: jasmine.Spy;
+  let dispatch: Mock;
   const root = () => fixture.nativeElement as HTMLElement;
 
   beforeEach(() => {
@@ -30,7 +31,7 @@ describe("CheckoutComponent", () => {
       ],
     });
     store = TestBed.inject(MockStore);
-    dispatch = spyOn(store, "dispatch");
+    dispatch = vi.spyOn(store, "dispatch");
     fixture = TestBed.createComponent(CheckoutComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
@@ -51,20 +52,21 @@ describe("CheckoutComponent", () => {
   for (const pincode of ["012345", "56001", "5600011", "abcdef"]) {
     it(`rejects the pincode ${pincode}`, () => {
       component.checkOutForm.setValue({ ...address, pincode });
-      expect(component.checkOutForm.controls.pincode.valid).toBeFalse();
+      expect(component.checkOutForm.controls.pincode.valid).toBe(false);
     });
   }
 
   it("places the order with no payload when the form is complete (the server prices it)", () => {
     component.checkOutForm.setValue(address);
     component.placeOrder();
-    expect(dispatch).toHaveBeenCalledOnceWith(placeOrder());
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(dispatch).toHaveBeenCalledWith(placeOrder());
   });
 
   it("locks the form when the loaded cart turns out to be empty", () => {
     store.overrideSelector(selectCartItems, []);
     store.refreshState();
     fixture.detectChanges();
-    expect(component.checkOutForm.disabled).toBeTrue();
+    expect(component.checkOutForm.disabled).toBe(true);
   });
 });

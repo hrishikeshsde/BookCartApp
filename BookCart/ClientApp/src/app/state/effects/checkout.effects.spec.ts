@@ -1,4 +1,5 @@
-import { provideHttpClient } from "@angular/common/http";
+import type { Mock } from "vitest";
+import { provideHttpClient, withXhr } from "@angular/common/http";
 import { HttpTestingController, provideHttpClientTesting } from "@angular/common/http/testing";
 import { TestBed } from "@angular/core/testing";
 import { provideRouter, Router } from "@angular/router";
@@ -18,8 +19,8 @@ describe("CheckoutEffects", () => {
   let http: HttpTestingController;
   let store: MockStore;
   let snackbar: SnackbarStub;
-  let navigate: jasmine.Spy;
-  let dispatch: jasmine.Spy;
+  let navigate: Mock;
+  let dispatch: Mock;
 
   beforeEach(() => {
     actions$ = new Subject<Action>();
@@ -29,7 +30,7 @@ describe("CheckoutEffects", () => {
         CheckoutEffects,
         provideMockActions(() => actions$),
         provideMockStore(),
-        provideHttpClient(),
+        provideHttpClient(withXhr()),
         provideHttpClientTesting(),
         provideRouter([]),
         { provide: SnackbarService, useValue: snackbar },
@@ -38,8 +39,8 @@ describe("CheckoutEffects", () => {
     effects = TestBed.inject(CheckoutEffects);
     http = TestBed.inject(HttpTestingController);
     store = TestBed.inject(MockStore);
-    dispatch = spyOn(store, "dispatch");
-    navigate = spyOn(TestBed.inject(Router), "navigate").and.resolveTo(true);
+    dispatch = vi.spyOn(store, "dispatch");
+    navigate = vi.spyOn(TestBed.inject(Router), "navigate").mockResolvedValue(true);
   });
   afterEach(() => http.verify());
 

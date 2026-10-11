@@ -10,7 +10,8 @@ All phases are done on one branch (`modernize/f1-security`, created by the repo 
 | F0 | Hygiene and quick fixes | Done |
 | F1 | Security | Done (HttpOnly cookie transport is open, see the end) |
 | F2 | Test infrastructure | Done (not yet run on GitHub CI) |
-| F3 to F7 | Upgrade, signals, SignalStore, styling, SSR | Not started |
+| F3 | Upgrade to Angular 22 (and Vitest) | Done |
+| F4 to F7 | Signals, SignalStore, styling, SSR | Not started |
 
 ## Step 0: baseline
 
@@ -85,7 +86,7 @@ It seeds an admin and three books through the API, then checks: home and the sel
 
 ## F2: test infrastructure
 
-**Runner (the plan's Karma bridge, which works on Angular 20).** `karma.conf.js` is rewritten (Jasmine, headless Chrome, plus a `ChromeHeadlessCI` launcher without Chrome's sandbox for containers), `src/test.ts` and the `main` entry in `angular.json` are gone (the builder finds `*.spec.ts` itself), `tsconfig.spec.json` is simplified, `@angular/platform-browser-dynamic` is uninstalled. `npm test` is one headless run; `npm run test:watch` keeps a visible Chrome open. The 36 generated "should create" specs are deleted.
+**Runner (the plan's Karma bridge, which works on Angular 20; replaced by Vitest in F3.4 below).** `karma.conf.js` is rewritten (Jasmine, headless Chrome, plus a `ChromeHeadlessCI` launcher without Chrome's sandbox for containers), `src/test.ts` and the `main` entry in `angular.json` are gone (the builder finds `*.spec.ts` itself), `tsconfig.spec.json` is simplified, `@angular/platform-browser-dynamic` is uninstalled. `npm test` is one headless run; `npm run test:watch` keeps a visible Chrome open. The 36 generated "should create" specs are deleted.
 
 **150 specs**, passing in random order (checked repeatedly). Where the logic lives:
 
@@ -109,6 +110,37 @@ Specs build their data with `src/app/testing/fixtures.ts` and `helpers.ts` and u
 
 **Not covered.** `my-orders`, `nav-bar`, `home`, `book-details`, `book-summary`, the admin pages, and the categories and similar-books effects have no specs. The Vitest switch is F3.4 in the plan; the specs use Jasmine's `spyOn` and `jasmine.Spy`, which that step has to translate.
 
+## F3: upgrade to Angular 22
+
+Angular 20.1 to **22.2.2**, NgRx 19 to **22.0.1**, Material/CDK 20 to **22.2.2**, TypeScript 5.8 to **6.0.3**, Karma/Jasmine to **Vitest 5**. rxjs (7.8.2) and zone.js (0.15) are unchanged. Done on one working tree, so the plan's "one commit per major version" is yours to cut: the Angular 21 state is reproducible with `ng update ...@21` and was verified before moving on (build, 150 specs and the smoke test all passed on 21 as well as on 22).
+
+**The upgrade itself**
+- One `ng update` per major, covering core, CLI, Material, CDK and every NgRx package together. The plan runs them as three commands, but NgRx 19 peers on Angular 19 and would have blocked the first; together they resolve cleanly. The second hop needed `--allow-dirty` (nothing is committed between the hops).
+- What the migrations changed in the code, all behaviour-preserving: `provideZoneChangeDetection()` in `main.ts` (Angular 21 made zoneless the default; this app still relies on zone.js until F4); `ChangeDetectionStrategy.Eager` on the two components that used the default (Angular 22 makes OnPush the default; F4.6 converts them to OnPush); `withXhr()` on the HTTP client (Angular 22 defaults to `fetch`; F6 switches on purpose); the template migration found nothing to convert.
+- TypeScript 6 deprecates `baseUrl`, so `tsconfig.json` uses `paths: { "src/app/*": ["./src/app/*"] }` instead. All `src/app/...` imports are unchanged (the plan's other option was a codemod to `@app/` imports).
+- The new `CanMatchFn` takes a third argument; one spec call was updated.
+- Angular 22 would have warned about `?.` and `??` on values that cannot be null; the migration suppresses those two diagnostics, and they were turned back on: the build reports nothing.
+
+**F3.3 cleanup**
+- `@angular/animations` and `provideAnimations()` are gone. The My Orders row now opens and closes with a CSS grid-rows transition (same 225 ms curve), hidden from the keyboard and screen readers while closed, and without motion for `prefers-reduced-motion`. The smoke test checks it.
+- `experimentalDecorators` and `useDefineForClassFields: false` are removed from `tsconfig.json`; the empty `src/assets` and its `angular.json` entries are gone (`environments/` and `fileReplacements` went in F0).
+- `.npmrc` stays, for a different reason. A strict `npm ci` now fails only because the lock file lacks `@popperjs/core`, a peer of Bootstrap's JavaScript, which this app does not use. It goes with Bootstrap in F6.
+- Node 24 is pinned in CI (Angular 22's CLI needs Node `^24.15` or `^22.22.3`).
+
+**F3.4 Vitest** (replaces the F2 Karma bridge)
+- Angular's own migrations did the work: `ng update @angular/cli --name migrate-karma-to-vitest` for the builder and `ng g @schematics/angular:refactor-jasmine-vitest` for the 15 spec files that used Jasmine APIs (report: zero manual TODOs). Karma, Jasmine, `karma.conf.js` and `istanbul-lib-instrument` are removed; `vitest` and `jsdom` are added. `npm test` is `ng test --no-watch`; `npm run test:watch` is `ng test`. No browser is needed anymore, in CI either.
+- What still needed hand work: the schematic took my local helper `fail(...)` for Jasmine's global and rewrote the calls (renamed `failWith`, statuses restored); `fakeAsync` does not work under Vitest (no zone ProxyZone), so the two specs that wait out the half-second name check use `vi.useFakeTimers()`; the `store.dispatch` stubs are plain spies (NgRx 22's `dispatch` has a signal overload that the generated `mockReturnValue(undefined)` does not type-check against); the converted files were re-indented from 4 to 2 spaces to match `.editorconfig`.
+- **Mutation check repeated on Vitest:** the same 15 deliberate breakages, all caught (14 in the script run; one run captured no output because of a harness glitch and was reproduced by hand: two specs fail). Files restored byte-for-byte.
+
+**Result**
+| | Angular 20 (F2) | Angular 22 (F3) |
+|---|---|---|
+| Initial bundle | 1.10 MB raw / 242 kB transfer | 1.09 MB raw / 225.8 kB transfer |
+| Unit tests | 150, Karma + headless Chrome | 150, Vitest + jsdom (16 s for the run) |
+| Smoke test | 21 of 21 | 22 of 22 (new: My Orders row opens and closes) |
+
+Raw size along the way: 1.10 MB (Angular 20), 1.13 MB (21), 1.16 MB (22), then 1.09 MB after the cleanup step, which removed the animations package together with the two tsconfig options (not measured separately). The transferred size stayed near 242 kB until that step.
+
 ## Differences from the plan
 
 | Plan said | Done | Why |
@@ -127,4 +159,4 @@ Specs build their data with `src/app/testing/fixtures.ts` and `helpers.ts` and u
 | 2 | The initial bundle is 1.10 MB against the 1 MB budget. | F6 |
 | 3 | No specs for `my-orders`, `nav-bar`, `home`, `book-details`, `book-summary`, the admin pages and two effects; the CI test step has not run on GitHub. | F2 follow-up |
 | 4 | `book-summary` still loads the Gemini sparkle image from `gstatic.com`. | F6 |
-| 5 | Specs use Jasmine spies (`spyOn`); the Vitest switch needs them translated. | F3.4 |
+| 5 | `withXhr()`, `provideZoneChangeDetection()` and `ChangeDetectionStrategy.Eager` (added by the Angular 22 migrations to keep today's behaviour) stay until F6 (`withFetch()`) and F4 (zoneless, OnPush). | F4, F6 |

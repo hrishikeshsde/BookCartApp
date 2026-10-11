@@ -9,6 +9,7 @@ import {
   loadSimilarBooksSuccess,
 } from "../actions/similar-books.actions";
 import { selectCurrentBookId } from "../selectors/book.selectors";
+import { errorText } from "src/app/shared/http-error";
 
 @Injectable()
 export class SimilarBooksEffects {
@@ -26,7 +27,7 @@ export class SimilarBooksEffects {
               return this.bookService.getSimilarBooks(Number(bookId)).pipe(
                 map((books) => loadSimilarBooksSuccess({ books })),
                 catchError((error) =>
-                  of(loadSimilarBooksFailure({ errorMessage: error }))
+                  of(loadSimilarBooksFailure({ errorMessage: errorText(error) }))
                 )
               );
             } else {

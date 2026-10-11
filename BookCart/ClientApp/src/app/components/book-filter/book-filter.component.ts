@@ -29,8 +29,8 @@ import { selectCategories } from "src/app/state/selectors/categories.selectors";
   ],
 })
 export class BookFilterComponent {
-  @Input()
-  category: string;
+  @Input({ required: true })
+  category!: string;
 
   private readonly store = inject(Store);
 

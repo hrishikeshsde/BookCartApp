@@ -17,8 +17,8 @@ import { addToCart } from "src/app/state/actions/cart.actions";
     imports: [MatButton, MatIcon]
 })
 export class AddtocartComponent {
-  @Input()
-  bookId: number;
+  @Input({ required: true })
+  bookId!: number;
 
   private readonly store = inject(Store);
 

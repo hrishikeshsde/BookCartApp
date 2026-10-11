@@ -1,20 +1,25 @@
+import { HttpErrorResponse } from "@angular/common/http";
 import { inject, Injectable } from "@angular/core";
 import { Router } from "@angular/router";
 import { Actions, createEffect, ofType } from "@ngrx/effects";
 import { Store } from "@ngrx/store";
 import { catchError, combineLatest, map, of, switchMap, take, tap } from "rxjs";
-import { User } from "src/app/models/user";
 import { AuthenticationService } from "src/app/services/authentication.service";
+import { SnackbarService } from "src/app/services/snackbar.service";
+import { TokenStorage } from "src/app/services/token-storage.service";
+import { errorText, INVALID_CREDENTIALS } from "src/app/shared/http-error";
+import { safeReturnUrl } from "src/app/shared/return-url";
 import {
   login,
   loginFailure,
   loginSuccess,
   logout,
+  restoreSession,
+  sessionExpired,
+  sessionResolved,
   setAuthState,
 } from "../actions/auth.actions";
 import { selectQueryParams } from "../selectors/router.selectors";
-import { connect } from "http2";
-import { loadCart } from "../actions/cart.actions";
 
 @Injectable()
 export class AuthEffects {
@@ -22,6 +27,8 @@ export class AuthEffects {
   private readonly authenticationService = inject(AuthenticationService);
   private readonly router = inject(Router);
   private readonly store = inject(Store);
+  private readonly tokenStorage = inject(TokenStorage);
+  private readonly snackbarService = inject(SnackbarService);
 
   login$ = createEffect(() =>
     this.actions$.pipe(
@@ -33,12 +40,19 @@ export class AuthEffects {
         ]).pipe(
           take(1),
           map(([queryParam, response]) => {
-            localStorage.setItem("authToken", response?.token);
-            this.router.navigate([queryParam["returnUrl"] ?? "/"]);
+            this.tokenStorage.set(response.token);
+            this.router.navigateByUrl(safeReturnUrl(queryParam["returnUrl"]));
             return loginSuccess();
           }),
-          catchError((error: any) =>
-            of(loginFailure({ errorMessage: new Error(error).message }))
+          catchError((error: unknown) =>
+            of(
+              loginFailure({
+                errorMessage:
+                  error instanceof HttpErrorResponse && error.status === 401
+                    ? INVALID_CREDENTIALS
+                    : errorText(error),
+              })
+            )
           )
         )
       )
@@ -50,37 +64,55 @@ export class AuthEffects {
       this.actions$.pipe(
         ofType(logout),
         tap(() => {
-          localStorage.clear();
+          this.tokenStorage.clear();
           this.router.navigate(["/login"]);
         })
       ),
     { dispatch: false }
   );
 
+  /** A 401 on a call that needed a login: forget the token and send the visitor to log in again, back to where they were. */
+  sessionExpired$ = createEffect(
+    () =>
+      this.actions$.pipe(
+        ofType(sessionExpired),
+        tap(({ hadSession }) => {
+          this.tokenStorage.clear();
+          if (hadSession) {
+            this.snackbarService.showSnackBar(
+              "Your session has expired. Please log in again."
+            );
+          }
+          const url = this.router.url;
+          if (!url.startsWith("/login")) {
+            this.router.navigate(["/login"], {
+              queryParams: { returnUrl: url },
+            });
+          }
+        })
+      ),
+    { dispatch: false }
+  );
+
+  /** App start: the token kept from an earlier visit decides whether this is a signed-in session. */
+  restoreSession$ = createEffect(() =>
+    this.actions$.pipe(
+      ofType(restoreSession),
+      map(() => {
+        const user = this.tokenStorage.user();
+        return user ? setAuthState({ user }) : sessionResolved();
+      })
+    )
+  );
+
   handleLoginSuccess$ = createEffect(() =>
     this.actions$.pipe(
       ofType(loginSuccess),
       map(() => {
-        const authToken = localStorage.getItem("authToken");
-        if (authToken) {
-          const userDetails = new User();
-          const decodeUserDetails = JSON.parse(
-            window.atob(authToken.split(".")[1])
-          );
-          userDetails.userId = decodeUserDetails.userId;
-          userDetails.username = decodeUserDetails.name;
-          // "sub" is the user id; the role is in the role claim (older tokens carried it in both).
-          userDetails.userTypeName =
-            decodeUserDetails[
-              "http://schemas.microsoft.com/ws/2008/06/identity/claims/role"
-            ] ?? decodeUserDetails.role;
-
-          return setAuthState({
-            user: userDetails,
-          });
-        } else {
-          return loginFailure({ errorMessage: "Invalid token" });
-        }
+        const user = this.tokenStorage.user();
+        return user
+          ? setAuthState({ user })
+          : loginFailure({ errorMessage: "Invalid token" });
       })
     )
   );

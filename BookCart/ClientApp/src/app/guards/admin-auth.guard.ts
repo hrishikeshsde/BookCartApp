@@ -1,75 +1,36 @@
-import { inject, Injectable } from "@angular/core";
-import {
-  ActivatedRouteSnapshot,
-  Route,
-  Router,
-  RouterStateSnapshot,
-  UrlSegment,
-  UrlTree,
-} from "@angular/router";
+import { inject } from "@angular/core";
+import { CanMatchFn, Router } from "@angular/router";
 import { Store } from "@ngrx/store";
-import { map, Observable } from "rxjs";
-import { selectAuthenticatedUser } from "../state/selectors/auth.selectors";
+import { filter, map, switchMap, take } from "rxjs";
+import {
+  selectAuthenticatedUser,
+  selectAuthResolved,
+} from "../state/selectors/auth.selectors";
 
-@Injectable({
-  providedIn: "root",
-})
-export class AdminAuthGuard {
-  private readonly store = inject(Store);
-  private readonly router = inject(Router);
-
-  canActivate(
-    next: ActivatedRouteSnapshot,
-    state: RouterStateSnapshot
-  ):
-    | Observable<boolean | UrlTree>
-    | Promise<boolean | UrlTree>
-    | boolean
-    | UrlTree {
-    return this.store.select(selectAuthenticatedUser).pipe(
-      map((user) => {
-        if (user?.userTypeName == "Admin") {
-          return true;
-        }
-        this.router.navigate(["/login"], {
-          queryParams: { returnUrl: state.url },
-        });
-        return false;
-      })
-    );
-  }
-
-  canActivateChild(
-    route: ActivatedRouteSnapshot,
-    state: RouterStateSnapshot
-  ):
-    | Observable<boolean | UrlTree>
-    | Promise<boolean | UrlTree>
-    | boolean
-    | UrlTree {
-    return this.canActivate(route, state);
-  }
-
-  canLoad(
-    route: Route,
-    segments: UrlSegment[]
-  ):
-    | Observable<boolean | UrlTree>
-    | Promise<boolean | UrlTree>
-    | boolean
-    | UrlTree {
-    const url = `/${route.path}`;
-
-    return this.store.select(selectAuthenticatedUser).pipe(
-      map((user) => {
-        if (user?.userTypeName == "Admin") {
-          return true;
-        }
-        this.router.navigate(["/login"], {
-          queryParams: { returnUrl: url },
-        });
-        return false;
-      })
-    );
-  }
-}
+/**
+ * Decides whether the admin routes exist for this visitor (so their code is not even downloaded for anyone else).
+ * An admin passes, a signed-in non-admin goes home, a visitor who is not signed in goes to log in.
+ */
+export const adminGuard: CanMatchFn = (_route, segments) => {
+  const router = inject(Router);
+  const store = inject(Store);
+  return store.select(selectAuthResolved).pipe(
+    filter(Boolean),
+    take(1),
+    switchMap(() => store.select(selectAuthenticatedUser)),
+    take(1),
+    map((user) => {
+      if (user?.userTypeName === "Admin") {
+        return true;
+      }
+      if (user) {
+        return router.createUrlTree(["/"]);
+      }
+      return router.createUrlTree(["/login"], {
+        queryParams: {
+          returnUrl: "/" + segments.map((segment) => segment.path).join("/"),
+        },
+      });
+    })
+  );
+};

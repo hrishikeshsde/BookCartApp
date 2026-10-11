@@ -9,12 +9,23 @@
         <button mat-raised-button [routerLink]="['/register']">Register</button>
       </div>
     </mat-card-header>
-    @if ((error$ | async) && loginForm.errors) {
+    @if (error$ | async; as error) {
+      @if (error === invalidCredentials) {
+        @if (loginForm.errors) {
     <mat-card-header>
       <mat-card-subtitle>
         <mat-error>Login Failed. Username or Password is incorrect.</mat-error>
-      </mat-card-subtitle> </mat-card-header
-    >}
+      </mat-card-subtitle>
+    </mat-card-header>
+        }
+      } @else {
+    <mat-card-header>
+      <mat-card-subtitle>
+        <mat-error>Login failed: {{ error }}</mat-error>
+      </mat-card-subtitle>
+    </mat-card-header>
+      }
+    }
     <mat-card-content class="p-3">
       <form [formGroup]="loginForm" (ngSubmit)="login()" novalidate>
         <mat-form-field class="w-100 mt-1" appearance="outline">

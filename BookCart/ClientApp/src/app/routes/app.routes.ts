@@ -2,8 +2,8 @@ import { Routes } from "@angular/router";
 import { provideEffects } from "@ngrx/effects";
 import { provideState } from "@ngrx/store";
 import { HomeComponent } from "../components/home/home.component";
-import { AdminAuthGuard } from "../guards/admin-auth.guard";
-import { AuthGuard } from "../guards/auth.guard";
+import { adminGuard } from "../guards/admin-auth.guard";
+import { authGuard } from "../guards/auth.guard";
 import { RegisterEffects } from "../state/effects/register.effects";
 import { SimilarBooksEffects } from "../state/effects/similar-books.effects";
 import {
@@ -73,7 +73,7 @@ export const APP_ROUTES: Routes = [
       import("../components/checkout/checkout.component").then(
         (c) => c.CheckoutComponent
       ),
-    canActivate: [AuthGuard],
+    canActivate: [authGuard],
     title: "Checkout",
   },
   {
@@ -86,7 +86,7 @@ export const APP_ROUTES: Routes = [
       import("../components/my-orders/my-orders.component").then(
         (c) => c.MyOrdersComponent
       ),
-    canActivate: [AuthGuard],
+    canActivate: [authGuard],
     title: "My Order Details",
   },
   {
@@ -95,14 +95,13 @@ export const APP_ROUTES: Routes = [
       import("../components/wishlist/wishlist.component").then(
         (c) => c.WishlistComponent
       ),
-    canActivate: [AuthGuard],
+    canActivate: [authGuard],
     title: "Wishlist",
   },
   {
     path: "admin/books",
     loadChildren: () => import("./admin.routes").then((m) => m.ADMIN_ROUTES),
-    canLoad: [AdminAuthGuard],
-    canActivate: [AdminAuthGuard],
+    canMatch: [adminGuard],
     title: "Admin | Books",
   },
   {

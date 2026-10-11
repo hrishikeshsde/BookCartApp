@@ -1,6 +1,10 @@
 import { AsyncPipe } from "@angular/common";
 import { ChangeDetectionStrategy, Component, inject } from "@angular/core";
-import { FormBuilder, ReactiveFormsModule, Validators } from "@angular/forms";
+import {
+  NonNullableFormBuilder,
+  ReactiveFormsModule,
+  Validators,
+} from "@angular/forms";
 import { MatButton } from "@angular/material/button";
 import {
   MatCard,
@@ -24,6 +28,7 @@ import { Store } from "@ngrx/store";
 import { combineLatest, EMPTY } from "rxjs";
 import { catchError, map } from "rxjs/operators";
 import { SnackbarService } from "src/app/services/snackbar.service";
+import { Book } from "src/app/models/book";
 import { addBook, updateBook } from "src/app/state/actions/book.actions";
 import { loadCategories } from "src/app/state/actions/categories.actions";
 import { selectCurrentBookDetails } from "src/app/state/selectors/book.selectors";
@@ -54,13 +59,13 @@ import { selectCategories } from "src/app/state/selectors/categories.selectors";
     ]
 })
 export class BookFormComponent {
-  private readonly fb = inject(FormBuilder);
+  private readonly fb = inject(NonNullableFormBuilder);
   private readonly router = inject(Router);
   private readonly snackBarService = inject(SnackbarService);
   private readonly store = inject(Store);
 
-  coverImagePath;
-  files;
+  coverImagePath = "";
+  files: FileList | null = null;
 
   bookForm = this.fb.group({
     bookId: 0,
@@ -124,12 +129,17 @@ export class BookFormComponent {
     }
   }
 
-  uploadImage(event) {
-    this.files = event.target.files;
+  uploadImage(event: Event) {
+    const input = event.target as HTMLInputElement;
+    this.files = input.files;
+    const file = input.files?.[0];
+    if (!file) {
+      return;
+    }
     const reader = new FileReader();
-    reader.readAsDataURL(event.target.files[0]);
-    reader.onload = (myevent: ProgressEvent) => {
-      this.coverImagePath = (myevent.target as FileReader).result;
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+      this.coverImagePath = reader.result as string;
     };
   }
 
@@ -137,13 +147,13 @@ export class BookFormComponent {
     this.router.navigate(["/admin/books"]);
   }
 
-  private setBookFormData(bookFormData) {
+  private setBookFormData(bookFormData: Book) {
     this.bookForm.setValue({
       bookId: bookFormData.bookId,
       title: bookFormData.title,
       author: bookFormData.author,
       category: bookFormData.category,
-      price: bookFormData.price,
+      price: String(bookFormData.price),
     });
     this.coverImagePath = "/Upload/" + bookFormData.coverFileName;
   }

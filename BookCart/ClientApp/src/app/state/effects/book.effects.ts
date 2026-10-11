@@ -1,10 +1,11 @@
 import { inject, Injectable } from "@angular/core";
 import { Router } from "@angular/router";
-import { act, Actions, createEffect, ofType } from "@ngrx/effects";
+import { Actions, createEffect, ofType } from "@ngrx/effects";
 import { catchError, concatMap, exhaustMap, map, of, tap } from "rxjs";
 import { BookService } from "src/app/services/book.service";
 import { SnackbarService } from "src/app/services/snackbar.service";
 import * as BookActions from "../actions/book.actions";
+import { errorText } from "src/app/shared/http-error";
 
 @Injectable()
 export class BookEffects {
@@ -15,17 +16,13 @@ export class BookEffects {
 
   loadBooks$ = createEffect(() =>
     this.actions$.pipe(
-      ofType(
-        BookActions.loadBooks,
-        BookActions.addBookSuccess,
-        BookActions.updateBookSuccess,
-        BookActions.deleteBookSuccess
-      ),
+      // Add, update and delete are applied to the state by the reducer, so they do not refetch the whole list.
+      ofType(BookActions.loadBooks),
       exhaustMap(() =>
         this.bookService.getAllBooks().pipe(
           map((books) => BookActions.loadBooksSuccess({ books })),
           catchError((error) =>
-            of(BookActions.loadBooksFailure({ errorMessage: error }))
+            of(BookActions.loadBooksFailure({ errorMessage: errorText(error) }))
           )
         )
       )
@@ -45,7 +42,7 @@ export class BookEffects {
             this.navigateToAdminPanel();
           }),
           catchError((error) =>
-            of(BookActions.addBookFailure({ errorMessage: error }))
+            of(BookActions.addBookFailure({ errorMessage: errorText(error) }))
           )
         )
       )
@@ -63,7 +60,7 @@ export class BookEffects {
             this.navigateToAdminPanel();
           }),
           catchError((error) =>
-            of(BookActions.updateBookFailure({ errorMessage: error }))
+            of(BookActions.updateBookFailure({ errorMessage: errorText(error) }))
           )
         )
       )
@@ -80,7 +77,7 @@ export class BookEffects {
             this.snackbarService.showSnackBar("Book deleted successfully");
           }),
           catchError((error) =>
-            of(BookActions.deleteBookFailure({ errorMessage: error }))
+            of(BookActions.deleteBookFailure({ errorMessage: errorText(error) }))
           )
         )
       )

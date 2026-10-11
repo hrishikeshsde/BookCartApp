@@ -5,6 +5,7 @@ import {
   inject,
   OnDestroy,
 } from "@angular/core";
+import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { MatProgressSpinner } from "@angular/material/progress-spinner";
 import { ActivatedRoute } from "@angular/router";
 import { Store } from "@ngrx/store";
@@ -52,10 +53,6 @@ export class HomeComponent implements OnDestroy {
       homeVm.selectedCategory = params.category;
       homeVm.searchItem = params.item;
 
-      this.store.dispatch(
-        setSearchItemValue({ searchItem: homeVm.searchItem })
-      );
-
       if (homeVm.selectedCategory) {
         const filteredBookByCategory = books.filter(
           (book) =>
@@ -90,6 +87,14 @@ export class HomeComponent implements OnDestroy {
 
   constructor() {
     this.store.dispatch(loadBooks());
+
+    // The search box reads the search text from the store. Keep it in step with the address bar here, not as a
+    // side effect inside the view model pipeline above.
+    this.queryParams$
+      .pipe(takeUntilDestroyed())
+      .subscribe((params) =>
+        this.store.dispatch(setSearchItemValue({ searchItem: params.item }))
+      );
   }
 
   ngOnDestroy() {

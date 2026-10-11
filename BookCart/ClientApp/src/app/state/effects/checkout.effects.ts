@@ -11,6 +11,7 @@ import {
   placeOrderFailure,
   placeOrderSuccess,
 } from "../actions/checkout.actions";
+import { errorText } from "src/app/shared/http-error";
 
 @Injectable()
 export class CheckoutEffects {
@@ -27,7 +28,7 @@ export class CheckoutEffects {
       switchMap(() =>
         this.checkoutService.placeOrder().pipe(
           map(() => placeOrderSuccess()),
-          catchError((error) => of(placeOrderFailure({ errorMessage: error })))
+          catchError((error) => of(placeOrderFailure({ errorMessage: errorText(error) })))
         )
       )
     )

@@ -9,6 +9,7 @@ import {
   registerFailure,
   registerSuccess,
 } from "../actions/auth.actions";
+import { errorText } from "src/app/shared/http-error";
 
 @Injectable()
 export class RegisterEffects {
@@ -23,8 +24,8 @@ export class RegisterEffects {
       switchMap((action) =>
         this.userService.registerUser(action.userdetails).pipe(
           map(() => registerSuccess()),
-          catchError((error: any) =>
-            of(registerFailure({ errorMessage: new Error(error).message }))
+          catchError((error: unknown) =>
+            of(registerFailure({ errorMessage: errorText(error) }))
           )
         )
       )

@@ -1,8 +1,8 @@
 import { NgClass } from "@angular/common";
-import { Component, inject, Input, OnChanges, OnDestroy } from "@angular/core";
+import { Component, inject, Input, OnChanges } from "@angular/core";
+import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { MatButton } from "@angular/material/button";
 import { Store } from "@ngrx/store";
-import { ReplaySubject, takeUntil } from "rxjs";
 import { Book } from "src/app/models/book";
 import { toggleWishlistItem } from "src/app/state/actions/wishlist.actions";
 import { selectWishlistItems } from "src/app/state/selectors/wishlist.selectors";
@@ -13,51 +13,42 @@ import { selectWishlistItems } from "src/app/state/selectors/wishlist.selectors"
     styleUrls: ["./addtowishlist.component.scss"],
     imports: [MatButton, NgClass]
 })
-export class AddtowishlistComponent implements OnChanges, OnDestroy {
-  @Input()
-  bookId: number;
+export class AddtowishlistComponent implements OnChanges {
+  @Input({ required: true })
+  bookId!: number;
 
   @Input()
   showButton = false;
 
   private readonly store = inject(Store);
 
-  userId = localStorage.getItem("userId");
   toggle = false;
-  buttonText = "";
-  private destroyed$ = new ReplaySubject<void>(1);
+  buttonText = "Add to Wishlist";
+  private wishlist: Book[] = [];
 
-  ngOnChanges() {
+  constructor() {
+    // One subscription for the life of the component (it used to open a new one on every input change).
     this.store
       .select(selectWishlistItems)
-      .pipe(takeUntil(this.destroyed$))
-      .subscribe((bookData: Book[]) => {
-        this.setFavourite(bookData);
-        this.setButtonText();
+      .pipe(takeUntilDestroyed())
+      .subscribe((items) => {
+        this.wishlist = items;
+        this.refresh();
       });
   }
 
-  private setFavourite(bookData: Book[]) {
-    const favBook = bookData.find((f) => f.bookId === this.bookId);
-
-    if (favBook) {
-      this.toggle = true;
-    } else {
-      this.toggle = false;
-    }
+  ngOnChanges() {
+    this.refresh();
   }
 
-  private setButtonText() {
-    if (this.toggle) {
-      this.buttonText = "Remove from Wishlist";
-    } else {
-      this.buttonText = "Add to Wishlist";
-    }
+  private refresh() {
+    this.toggle = this.wishlist.some((book) => book.bookId === this.bookId);
+    this.buttonText = this.toggle ? "Remove from Wishlist" : "Add to Wishlist";
   }
 
   toggleValue() {
     this.toggle = !this.toggle;
-    this.setButtonText();
+    this.buttonText = this.toggle ? "Remove from Wishlist" : "Add to Wishlist";
 
     this.store.dispatch(
       toggleWishlistItem({
@@ -65,10 +56,5 @@ export class AddtowishlistComponent implements OnChanges, OnDestroy {
         isAdd: this.toggle,
       })
     );
-  }
-
-  ngOnDestroy() {
-    this.destroyed$.next();
-    this.destroyed$.complete();
   }
 }

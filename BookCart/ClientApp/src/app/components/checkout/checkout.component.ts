@@ -65,10 +65,7 @@ export class CheckoutComponent {
     addressLine2: ["", Validators.required],
     pincode: [
       "",
-      Validators.compose([
-        Validators.required,
-        Validators.pattern("^[1-9][0-9]{5}$"),
-      ]),
+      [Validators.required, Validators.pattern("^[1-9][0-9]{5}$")],
     ],
     state: ["", [Validators.required]],
   });
@@ -96,7 +93,7 @@ export class CheckoutComponent {
 
   placeOrder() {
     if (this.checkOutForm.valid) {
-      this.store.dispatch(placeOrder({ totalPrice: this.totalPrice }));
+      this.store.dispatch(placeOrder());
     }
   }
 }

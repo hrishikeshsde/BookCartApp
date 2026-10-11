@@ -18,6 +18,7 @@ import {
   toggleWishlistItemSuccess,
 } from "../actions/wishlist.actions";
 import { selectAuthenticatedUser } from "../selectors/auth.selectors";
+import { errorText } from "src/app/shared/http-error";
 
 @Injectable()
 export class WishlistEffects {
@@ -37,7 +38,7 @@ export class WishlistEffects {
             .pipe(
               map((wishlist) => loadWishlistSuccess({ wishlist })),
               catchError((error) =>
-                of(loadWishlistFailure({ errorMessage: error }))
+                of(loadWishlistFailure({ errorMessage: errorText(error) }))
               )
             );
         }
@@ -64,7 +65,7 @@ export class WishlistEffects {
                 }
               }),
               catchError((error) =>
-                of(toggleWishlistItemFailure({ errorMessage: error }))
+                of(toggleWishlistItemFailure({ errorMessage: errorText(error) }))
               )
             );
         }
@@ -93,7 +94,7 @@ export class WishlistEffects {
                   "Error ocurred while removing items from the Wishlist : ",
                   error
                 );
-                return of(clearWishlistFailure({ errorMessage: error }));
+                return of(clearWishlistFailure({ errorMessage: errorText(error) }));
               })
             );
         }

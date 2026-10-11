@@ -4,7 +4,7 @@
     class="mat-elevation-z2 custom-card-header justify-content-between"
   >
     <mat-card-title class="mat-h1"> Shopping cart </mat-card-title>
-    @if (cartItems?.items.length > 0) {
+    @if (cartItems.items.length > 0) {
     <div>
       <button class="mat-elevation-z4" mat-raised-button (click)="clearCart()">
         Clear cart
@@ -12,7 +12,7 @@
     </div>
     }
   </mat-card-header>
-  @if (cartItems?.items.length > 0) {
+  @if (cartItems.items.length > 0) {
   <mat-card-content class="my-3">
     <table mat-table [dataSource]="cartItems.items">
       <ng-container matColumnDef="image">

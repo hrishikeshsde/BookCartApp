@@ -2,7 +2,7 @@
   <mat-list-item [class.active-category]="!category" routerLink="/">
     All Categories
   </mat-list-item>
-  @for (c of categories$ | async; track c) {
+  @for (c of categories$ | async; track c.categoryId) {
   <mat-list-item
     [class.active-category]="category == (c.categoryName | lowercase)"
     routerLink="/filter"

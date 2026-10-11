@@ -14,7 +14,6 @@ import { MatTooltip } from "@angular/material/tooltip";
 import { RouterLink, RouterLinkActive } from "@angular/router";
 import { Store } from "@ngrx/store";
 import { combineLatest, map } from "rxjs";
-import { UserType } from "src/app/models/usertype";
 import { logout } from "src/app/state/actions/auth.actions";
 import {
   selectAuthenticatedUser,
@@ -52,8 +51,6 @@ export class NavBarComponent {
 
   /** The backend serves its API reference (/scalar) in Development only, so only dev builds link to it. */
   protected readonly showApiDocs = isDevMode();
-
-  userType: UserType;
 
   userState$ = combineLatest([
     this.store.select(selectIsAuthenticated),

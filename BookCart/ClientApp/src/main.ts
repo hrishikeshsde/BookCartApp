@@ -1,10 +1,9 @@
 import { provideHttpClient, withInterceptors } from "@angular/common/http";
-import { enableProdMode, importProvidersFrom, isDevMode } from "@angular/core";
-import { BrowserModule, bootstrapApplication } from "@angular/platform-browser";
+import { isDevMode } from "@angular/core";
+import { bootstrapApplication } from "@angular/platform-browser";
 import { provideAnimations } from "@angular/platform-browser/animations";
 import {
   PreloadAllModules,
-  PreloadingStrategy,
   provideRouter,
   withInMemoryScrolling,
   withPreloading,
@@ -14,8 +13,8 @@ import { provideRouterStore, routerReducer } from "@ngrx/router-store";
 import { provideState, provideStore } from "@ngrx/store";
 import { provideStoreDevtools } from "@ngrx/store-devtools";
 import { AppComponent } from "./app/app.component";
-import { ErrorInterceptorService } from "./app/interceptors/error-interceptor.service";
-import { HttpInterceptorService } from "./app/interceptors/http-interceptor.service";
+import { errorInterceptor } from "./app/interceptors/error-interceptor.service";
+import { authTokenInterceptor } from "./app/interceptors/http-interceptor.service";
 import { APP_ROUTES } from "./app/routes/app.routes";
 import { AuthEffects } from "./app/state/effects/auth.effects";
 import { BookEffects } from "./app/state/effects/book.effects";
@@ -43,17 +42,11 @@ import {
   wishlistReducer,
 } from "./app/state/reducers/wishlist.reducers";
 import { ROUTER_FEATURE_KEY } from "./app/state/selectors/router.selectors";
-import { environment } from "./environments/environment";
-
-if (environment.production) {
-  enableProdMode();
-}
 
 bootstrapApplication(AppComponent, {
   providers: [
-    importProvidersFrom(BrowserModule),
     provideHttpClient(
-      withInterceptors([HttpInterceptorService, ErrorInterceptorService])
+      withInterceptors([authTokenInterceptor, errorInterceptor])
     ),
     provideAnimations(),
     provideRouter(
@@ -63,7 +56,6 @@ bootstrapApplication(AppComponent, {
       }),
       withPreloading(PreloadAllModules)
     ),
-    provideStore(),
     provideEffects(
       CategoriesEffects,
       BookEffects,

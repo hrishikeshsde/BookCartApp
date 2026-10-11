@@ -1,7 +1,7 @@
 import { createReducer, on } from "@ngrx/store";
 import { Book } from "src/app/models/book";
 import { CallState, LoadingState } from "src/app/shared/call-state";
-import { logout } from "../actions/auth.actions";
+import { logout, sessionExpired } from "../actions/auth.actions";
 import {
   clearWishlist,
   clearWishlistFailure,
@@ -58,7 +58,7 @@ export const wishlistReducer = createReducer(
     ...state,
     wishlistCallState: LoadingState.LOADING,
   })),
-  on(clearWishlistSuccess, (state) => ({
+  on(clearWishlistSuccess, (state): WishlistState => ({
     ...state,
     wishlist: [],
     wishlistCallState: LoadingState.LOADED,
@@ -67,7 +67,7 @@ export const wishlistReducer = createReducer(
     ...state,
     wishlistCallState: { errorMessage },
   })),
-  on(logout, () => ({
+  on(logout, sessionExpired, () => ({
     ...initialState,
   }))
 );

@@ -10,6 +10,7 @@ import {
   loadOrdersSuccess,
 } from "../actions/order.actions";
 import { selectAuthenticatedUser } from "../selectors/auth.selectors";
+import { errorText } from "src/app/shared/http-error";
 
 @Injectable()
 export class OrderEffects {
@@ -28,7 +29,7 @@ export class OrderEffects {
             .pipe(
               map((orders) => loadOrdersSuccess({ orders })),
               catchError((error) =>
-                of(loadOrdersFailure({ errorMessage: error }))
+                of(loadOrdersFailure({ errorMessage: errorText(error) }))
               )
             );
         }

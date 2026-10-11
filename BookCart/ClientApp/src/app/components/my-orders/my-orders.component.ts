@@ -43,6 +43,7 @@ import { Store } from "@ngrx/store";
 import { BehaviorSubject, combineLatest } from "rxjs";
 import { map } from "rxjs/operators";
 import { LoadingState } from "src/app/shared/call-state";
+import { CustomerOrder } from "src/app/models/order";
 import { loadOrders } from "src/app/state/actions/order.actions";
 import {
   selectOrderCallState,
@@ -100,7 +101,7 @@ export class MyOrdersComponent implements AfterViewInit {
   loadingState = LoadingState;
 
   displayedColumns: string[] = ["orderId", "orderDate", "cartTotal"];
-  expandedElement: null;
+  expandedElement: CustomerOrder | null = null;
 
   private readonly searchValue$ = new BehaviorSubject<string>("");
   private readonly paginatorReady$ = new BehaviorSubject<boolean>(false);
@@ -115,12 +116,13 @@ export class MyOrdersComponent implements AfterViewInit {
       let dataSource = new MatTableDataSource(order);
 
       // Set up custom filter predicate for searching orders
-      dataSource.filterPredicate = (data: any, filter: string) => {
+      dataSource.filterPredicate = (data: CustomerOrder, filter: string) => {
         const transformedFilter = filter.trim().toLowerCase();
+        // orderDate arrives from the API as an ISO string even though the model calls it a Date.
         return (
-          data.orderId?.toString().toLowerCase().includes(transformedFilter) ||
-          data.orderDate?.toLowerCase().includes(transformedFilter) ||
-          data.cartTotal?.toString().toLowerCase().includes(transformedFilter)
+          data.orderId.toLowerCase().includes(transformedFilter) ||
+          String(data.orderDate).toLowerCase().includes(transformedFilter) ||
+          String(data.cartTotal).toLowerCase().includes(transformedFilter)
         );
       };
 

@@ -7,17 +7,17 @@ export const ADMIN_ROUTES: Routes = [
       {
         path: "new",
         loadComponent: () =>
-          import("../components/admin/book-form/book-form.component").then(
-            (c) => c.BookFormComponent
-          ),
+          import(
+            "../components/admin/book-form-page/book-form-page.component"
+          ).then((c) => c.BookFormPageComponent),
         title: "Admin | Add Book",
       },
       {
         path: ":id",
         loadComponent: () =>
-          import("../components/admin/book-form/book-form.component").then(
-            (c) => c.BookFormComponent
-          ),
+          import(
+            "../components/admin/book-form-page/book-form-page.component"
+          ).then((c) => c.BookFormPageComponent),
         title: "Admin | Update Book",
       },
       {

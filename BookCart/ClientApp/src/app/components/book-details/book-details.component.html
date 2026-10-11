@@ -55,11 +55,16 @@
         </tbody>
       </table>
       <div>
-        <app-addtocart [bookId]="bookDetails.book.bookId"></app-addtocart>
+        <app-addtocart
+          [bookId]="bookDetails.book.bookId"
+          (add)="addToCart($event)"
+        ></app-addtocart>
         @if (bookDetails.isAuthenticated) {
         <app-addtowishlist
           [bookId]="bookDetails.book.bookId"
+          [wishlisted]="wishlistedIds().has(bookDetails.book.bookId)"
           [showButton]="true"
+          (toggle)="toggleWishlist($event)"
           class="ms-2"
         >
         </app-addtowishlist>
@@ -68,8 +73,20 @@
     </div>
   </mat-card-content>
 </mat-card>
-<app-book-summary [bookId]="bookDetails.book.bookId"></app-book-summary>
-<app-similarbooks></app-similarbooks>
+<app-book-summary
+  [summary]="summary()"
+  [loading]="summaryLoading()"
+  [error]="summaryError()"
+  (generate)="generateSummary()"
+></app-book-summary>
+<app-similarbooks
+  [books]="similarBooks()"
+  [loading]="similarLoading()"
+  [signedIn]="bookDetails.isAuthenticated"
+  [wishlistedIds]="wishlistedIds()"
+  (addToCart)="addToCart($event)"
+  (toggleWishlist)="toggleWishlist($event)"
+></app-similarbooks>
 }
 <!-- No Book Found State -->
 @else {

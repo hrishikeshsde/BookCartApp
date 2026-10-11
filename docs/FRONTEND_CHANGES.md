@@ -11,7 +11,8 @@ All phases are done on one branch (`modernize/f1-security`, created by the repo 
 | F1 | Security | Done (HttpOnly cookie transport is open, see the end) |
 | F2 | Test infrastructure | Done (not yet run on GitHub CI) |
 | F3 | Upgrade to Angular 22 (and Vitest) | Done |
-| F4 to F7 | Signals, SignalStore, styling, SSR | Not started |
+| F4 | Signals, smart/dumb components, zoneless | Done |
+| F5 to F7 | SignalStore, styling, SSR | Not started |
 
 ## Step 0: baseline
 
@@ -141,6 +142,66 @@ Angular 20.1 to **22.2.2**, NgRx 19 to **22.0.1**, Material/CDK 20 to **22.2.2**
 
 Raw size along the way: 1.10 MB (Angular 20), 1.13 MB (21), 1.16 MB (22), then 1.09 MB after the cleanup step, which removed the animations package together with the two tsconfig options (not measured separately). The transferred size stayed near 242 kB until that step.
 
+## F4: signals, smart/dumb components, zoneless
+
+Branch `modernize/f4-signals` (created by the repo owner).
+
+**F4.5 router inputs first** (it unblocked the rest)
+- `withComponentInputBinding()`: route and query parameters arrive as inputs (`id`, `category`, `item`, `returnUrl`). `@ngrx/router-store` and `state/selectors/router.selectors.ts` are gone; `main.ts` has an empty `provideStore()` and the five feature registrations.
+- `login` carries `returnUrl` in the action instead of reading it from the router state; `loadSimilarBooks` carries a `bookId`.
+
+**F4.1 / F4.2 signal inputs, outputs, queries; no more `BehaviorSubject`**
+- Every `@Input`/`@ViewChild` is `input()`/`viewChild()`; leaf components report clicks with `output()`.
+- `SubscriptionService` (the price filter's `BehaviorSubject`) is deleted: the price filter is a signal on the home page. `searchValue` in manage-books and my-orders is a signal feeding a `computed` table data source.
+- `linkedSignal` is used where a value must reset when its source changes: the AI summary resets when the book changes, the wishlist heart follows its input but flips at once on click.
+
+**F4.4 smart/dumb split**
+
+| Smart (talks to the store) | Dumb (inputs and outputs only) |
+|---|---|
+| `home`, `book-details`, `nav-bar`, `login`, `checkout`, `manage-books`, `my-orders`, `wishlist`, `shoppingcart`, new `book-form-page` | `book-card`, `book-filter`, `price-filter`, `search`, `addtocart`, `addtowishlist`, `similarbooks`, `book-summary`, `book-form` |
+
+- `book-summary` no longer calls the API; `book-details` does and passes the text, a loading flag and an error down. A late answer for a book the page has moved away from is dropped.
+- `search` reports `searched` / `cleared`; the nav bar navigates. The outputs are not called `search`: that is also a DOM event of the inner `<input type="search">` and it **bubbles**, so the nav bar received the raw `Event` and searched for `[object Event]`. The smoke test found it; a nav-bar spec pins it.
+- `book-form` (add/edit) takes `book` and `categories` and emits `save` (`{ formData, isUpdate }`) and `cancel`. The routed `book-form-page` finds the book from the `:id` input, loads books and categories, and dispatches add/update/cancel.
+
+**F4.3 `selectSignal` was done only where a component was rewritten anyway** (the plan says to skip slices that F5 moves). These five still use `store.select` with the async pipe and move with their slice in F5: `nav-bar` (`userState$`), `book-details` (`bookDetails$`), `shoppingcart` (`cartItems$`), `wishlist` (`wishlistItems$`), `delete-book` (`bookData$`). `manage-books` and `my-orders` already read with `selectSignal`; `book-form-page` and the two guards keep `select` on purpose (they need an observable for `switchMap`).
+
+**F4.6 zoneless**
+- `provideZonelessChangeDetection()`; `zone.js` is uninstalled, `src/polyfills.ts` is deleted, and the `polyfills` entries are gone from `angular.json` (build and test) and `tsconfig.app.json`. `AppComponent` is `OnPush` (the `Eager` the Angular 22 migration added is gone everywhere).
+- Audit: the only async callbacks that change component state are the book form's `FileReader.onload` and the summary request; both set signals. No component mutates a plain field after an async call. No `ExpressionChangedAfterItHasBeenChecked` or other console error in the smoke run.
+
+**Bugs fixed on the way**
+- A refresh on `/admin/books/<id>` showed an empty "Add" form (the page had no books yet), and saving it created a second copy of the book. The page now loads the books and categories itself (the smoke step "admin edit page by address" covers it).
+- The home page's spinner no longer flashes when books are reloaded in the background.
+- Enter in the search box still searches, and the browser's own `search` event no longer sends a visitor home when the box has text (spec in `search.component.spec.ts`).
+
+**Result**
+| | Angular 22 (F3) | F4 |
+|---|---|---|
+| Initial bundle | 1.09 MB raw / 224.7 kB transfer | 1.05 MB raw / 213.0 kB transfer (zone.js and router-store gone; still 51 kB over the 1 MB budget, F6) |
+| Unit tests | 150 | 206 (new: home, book-details, nav-bar, book-form, book-form-page, search, and the dumb components) |
+| Smoke test | 22 of 22 | 25 of 25 (new: details page by click and by address, admin edit page by address) |
+
+`ng build` reports no template warnings; `ngc` on the spec config is clean.
+
+### F4 follow-ups (what is left over, and where to pick it up)
+
+Nothing here blocks F5. Each row says what to do, so a later session can start without re-deriving it.
+
+| # | Left over | What to do | Belongs to |
+|---|---|---|---|
+| F4-1 | Five components still use `store.select` + async pipe: `nav-bar` (`userState$`, `combineLatest` of auth, user, wishlist count, cart count), `book-details` (`bookDetails$`), `shoppingcart`, `wishlist`, `delete-book`. | Replace with `selectSignal` + `computed` and drop `AsyncPipe`. When the slice moves to SignalStore (cart and wishlist early, auth last) read the store's signals instead. Leave the guards and `book-form-page` alone. | F5, slice by slice |
+| F4-2 | The search text is kept in the store (`setSearchItemValue`, `resetSearchItemValue`, `selectSearchItemValue`) only so the nav bar's box shows what the home page filtered by; `home` writes it from an effect. | When the books slice is rewritten, drop it: the nav bar can read the `item` query parameter from the router (or a small shared signal) and `home` stops dispatching from an effect. | F5 (books slice) |
+| F4-3 | No specs yet for `manage-books`, `my-orders`, `book-summary`, `delete-book`, `wishlist` and `page-not-found`. | Follow the pattern of `home.component.spec.ts` (real store with the needed reducers, or `provideMockStore` with `resetSelectors()` in `afterEach`). Worth testing: the table filter and paging of `manage-books` and `my-orders`, the row toggle, `book-summary` showing spinner, text or error. | F2 follow-up |
+| F4-4 | The mutation check (15 deliberate breakages, all caught after F3) was not repeated on the code F4 added. | Adapt `mutate-vitest.js` (it backs up each file and restores it in a `finally`, never run it without that) with breakages in: the `home` filters and price filter, `book-details` summary reset and late answer, `search` Enter and `search` event, `book-form` pristine check and `isUpdate`, `book-form-page` loads. | F2 follow-up |
+| F4-5 | The "no `ExpressionChangedAfterItHasBeenChecked` with zoneless" check is a reading of the code plus a smoke run: the smoke test prints console errors but does not fail on them. | Make the smoke test fail on any console error other than the deliberate 401s (login with a wrong password, expired session), including `NG0100`. | F2 follow-up |
+| F4-6 | `scripts/smoke/smoke.js` still has the `known` flag and `--expect-f1` option; every step is required now (the last flagged step, the edit page by address, passes). The helper that starts the backend and the dev server, runs the test and stops them is not in the repo. | Remove the flag and the option, and add that helper as `scripts/smoke/run.sh` (the README section above describes the manual steps). | Cleanup |
+| F4-7 | The dev console warns NG0913 for `Default_image.jpg`: its file is much larger than the card it is drawn in. | `NgOptimizedImage` with width and height, and resized covers from the backend (plan B4 item). | F6 |
+| F4-8 | `SearchComponent.suggestions` is `protected`, so its spec reads it through a cast. | Make it a public `readonly` or test through the rendered options. | Cleanup |
+| F4-9 | The book form checks nothing about the chosen cover on the client (the API enforces `.jpg/.jpeg/.png/.webp`, 2 MB, matching content; a bad file is a 400). | Optional: check type and size before upload and show the message in the form. | Optional |
+
+
 ## Differences from the plan
 
 | Plan said | Done | Why |
@@ -150,6 +211,8 @@ Raw size along the way: 1.10 MB (Angular 20), 1.13 MB (21), 1.16 MB (22), then 1
 | Admin guard sends a non-admin to login | A signed-in non-admin goes home | Not a login problem |
 | Guard example calls `inject(Store)` inside operators | Injected once at the top | `inject` only works in the injection context |
 | Replace guest cart id in F1.4 | Nothing to do | The backend phases did it |
+| F4.3 `selectSignal` for all ~40 call sites | Only in components rewritten for F4 | The plan itself says slices that F5 migrates can skip it |
+| F4.4 `book-form` becomes dumb | A new routed `book-form-page` holds the store code | Fixes the blank form on refresh |
 
 ## Open items
 
@@ -157,6 +220,8 @@ Raw size along the way: 1.10 MB (Angular 20), 1.13 MB (21), 1.16 MB (22), then 1
 |---|---|---|
 | 1 | Token transport is still `localStorage` (readable by any script). The plan's target is an HttpOnly cookie, which needs backend work (set the cookie at login, `SameSite=Strict`, antiforgery for state-changing calls); `TokenStorage` and the interceptors are the only places to change. | Backend + F1 follow-up |
 | 2 | The initial bundle is 1.10 MB against the 1 MB budget. | F6 |
-| 3 | No specs for `my-orders`, `nav-bar`, `home`, `book-details`, `book-summary`, the admin pages and two effects; the CI test step has not run on GitHub. | F2 follow-up |
+| 3 | No specs for `my-orders`, `manage-books`, `book-summary`, `delete-book`, `wishlist` and `page-not-found` (F4-3); the mutation check was not repeated on the F4 code (F4-4); the smoke test does not fail on console errors (F4-5); the CI test step has not run on GitHub. | F2 follow-up |
 | 4 | `book-summary` still loads the Gemini sparkle image from `gstatic.com`. | F6 |
-| 5 | `withXhr()`, `provideZoneChangeDetection()` and `ChangeDetectionStrategy.Eager` (added by the Angular 22 migrations to keep today's behaviour) stay until F6 (`withFetch()`) and F4 (zoneless, OnPush). | F4, F6 |
+| 5 | `withXhr()` (added by the Angular 22 migrations to keep today's behaviour) stays until F6 (`withFetch()`). | F6 |
+| 6 | The five `store.select` + async pipe sites (F4-1) and the search text in the store (F4-2) move with their slices to SignalStore. | F5 |
+| 7 | Smoke test cleanup: drop the `known` flag and `--expect-f1`, add the run helper to the repo (F4-6); Default_image NG0913 (F4-7); small test and form items (F4-8, F4-9). See the F4 follow-ups table. | Cleanup, F6 |

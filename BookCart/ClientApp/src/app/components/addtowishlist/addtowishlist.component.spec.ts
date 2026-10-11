@@ -1,59 +1,75 @@
 import { ComponentFixture, TestBed } from "@angular/core/testing";
-import { MockStore, provideMockStore } from "@ngrx/store/testing";
-import { toggleWishlistItem } from "src/app/state/actions/wishlist.actions";
-import { selectWishlistItems } from "src/app/state/selectors/wishlist.selectors";
-import { aBook } from "src/app/testing/fixtures";
+import { WishlistToggle } from "src/app/models/wishlist-toggle";
 import { AddtowishlistComponent } from "./addtowishlist.component";
 
 describe("AddtowishlistComponent", () => {
   let fixture: ComponentFixture<AddtowishlistComponent>;
-  let store: MockStore;
-  const label = () => (fixture.nativeElement as HTMLElement).querySelector("button")?.textContent?.trim();
+  let toggles: WishlistToggle[];
+  const root = () => fixture.nativeElement as HTMLElement;
+  const label = () => root().querySelector("button")?.textContent?.trim();
 
-  beforeEach(() => {
-    TestBed.configureTestingModule({
-      imports: [AddtowishlistComponent],
-      providers: [provideMockStore({ selectors: [{ selector: selectWishlistItems, value: [] }] })],
-    });
-    store = TestBed.inject(MockStore);
+  function show(inputs: { showButton?: boolean; wishlisted?: boolean } = {}) {
     fixture = TestBed.createComponent(AddtowishlistComponent);
     fixture.componentRef.setInput("bookId", 2);
-    fixture.componentRef.setInput("showButton", true);
+    fixture.componentRef.setInput("showButton", inputs.showButton ?? true);
+    fixture.componentRef.setInput("wishlisted", inputs.wishlisted ?? false);
+    toggles = [];
+    fixture.componentInstance.toggle.subscribe((t) => toggles.push(t));
     fixture.detectChanges();
-  });
-  afterEach(() => store.resetSelectors());
+  }
 
-  it("offers to add a book that is not on the wishlist", () => {
+  beforeEach(() => TestBed.configureTestingModule({ imports: [AddtowishlistComponent] }));
+
+  it("offers to add a book that is not on the wishlist, and to remove one that is", () => {
+    show({ wishlisted: false });
     expect(label()).toBe("Add to Wishlist");
-  });
 
-  it("offers to remove a book that is on it", () => {
-    store.overrideSelector(selectWishlistItems, [aBook(2)]);
-    store.refreshState();
+    fixture.componentRef.setInput("wishlisted", true);
     fixture.detectChanges();
     expect(label()).toBe("Remove from Wishlist");
   });
 
-  it("follows the wishlist as it changes, and when the book it shows changes", () => {
-    store.overrideSelector(selectWishlistItems, [aBook(2)]);
-    store.refreshState();
+  it("reports an add, and shows it at once without waiting for the server", () => {
+    show({ wishlisted: false });
+
+    root().querySelector("button")!.click();
+    fixture.detectChanges();
+
+    expect(toggles).toEqual([{ bookId: 2, isAdd: true }]);
+    expect(label()).toBe("Remove from Wishlist");
+  });
+
+  it("reports a removal", () => {
+    show({ wishlisted: true });
+    root().querySelector("button")!.click();
+    expect(toggles).toEqual([{ bookId: 2, isAdd: false }]);
+  });
+
+  it("goes back to what the parent says when the parent's answer changes", () => {
+    show({ wishlisted: false });
+    root().querySelector("button")!.click();
     fixture.detectChanges();
     expect(label()).toBe("Remove from Wishlist");
 
-    // the same component instance is reused for another book (not on the list)
-    fixture.componentRef.setInput("bookId", 9);
+    // the book is shown for another one that is not on the list
+    fixture.componentRef.setInput("wishlisted", true);
     fixture.detectChanges();
+    fixture.componentRef.setInput("wishlisted", false);
+    fixture.detectChanges();
+
     expect(label()).toBe("Add to Wishlist");
   });
 
-  it("clicking asks the store to add, and then to remove", () => {
-    vi.spyOn(store, "dispatch");
-    const button = (fixture.nativeElement as HTMLElement).querySelector("button") as HTMLButtonElement;
+  it("is a heart unless it is asked to be a button, and the heart shows the state", () => {
+    show({ showButton: false, wishlisted: false });
+    expect(root().querySelector("button")).toBeNull();
+    expect(root().querySelector(".favourite-unselected")).not.toBeNull();
 
-    button.click();
-    expect(store.dispatch).toHaveBeenCalledWith(toggleWishlistItem({ bookId: 2, isAdd: true }));
+    fixture.componentRef.setInput("wishlisted", true);
+    fixture.detectChanges();
+    expect(root().querySelector(".favourite-selected")).not.toBeNull();
 
-    button.click();
-    expect(store.dispatch).toHaveBeenCalledWith(toggleWishlistItem({ bookId: 2, isAdd: false }));
+    (root().querySelector(".favourite-selected") as HTMLElement).click();
+    expect(toggles).toEqual([{ bookId: 2, isAdd: false }]);
   });
 });

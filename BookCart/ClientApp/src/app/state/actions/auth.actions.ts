@@ -5,7 +5,7 @@ import { UserRegistration } from "src/app/models/userRegistration";
 
 export const login = createAction(
   "[Auth] Login",
-  props<{ loginCredentials: UserLogin }>()
+  props<{ loginCredentials: UserLogin; returnUrl?: string }>()
 );
 export const loginSuccess = createAction("[Auth] Login Success");
 

@@ -1,63 +1,60 @@
 import { ComponentFixture, TestBed } from "@angular/core/testing";
 import { By } from "@angular/platform-browser";
 import { provideRouter } from "@angular/router";
-import { MockStore, provideMockStore } from "@ngrx/store/testing";
-import { addToCart } from "src/app/state/actions/cart.actions";
-import { selectIsAuthenticated } from "src/app/state/selectors/auth.selectors";
-import { selectWishlistItems } from "src/app/state/selectors/wishlist.selectors";
+import { WishlistToggle } from "src/app/models/wishlist-toggle";
 import { aBook } from "src/app/testing/fixtures";
 import { BookCardComponent } from "./book-card.component";
 
 describe("BookCardComponent", () => {
   let fixture: ComponentFixture<BookCardComponent>;
-  let store: MockStore;
-  const element = () => fixture.nativeElement as HTMLElement;
+  const root = () => fixture.nativeElement as HTMLElement;
 
   beforeEach(() => {
     TestBed.configureTestingModule({
       imports: [BookCardComponent],
-      providers: [
-        provideRouter([]),
-        provideMockStore({
-          selectors: [
-            { selector: selectIsAuthenticated, value: false },
-            { selector: selectWishlistItems, value: [] },
-          ],
-        }),
-      ],
+      providers: [provideRouter([])],
     });
-    store = TestBed.inject(MockStore);
     fixture = TestBed.createComponent(BookCardComponent);
     fixture.componentRef.setInput("book", aBook(3, { title: "Dune", price: 250, coverFileName: "dune.png" }));
     fixture.detectChanges();
   });
-  afterEach(() => store.resetSelectors());
 
   it("shows the title, the price in rupees and the cover", () => {
-    expect(element().textContent).toContain("Dune");
-    expect(element().textContent).toContain("₹250.00");
-    expect(element().querySelector("img")?.getAttribute("src")).toBe("/Upload/dune.png");
+    expect(root().textContent).toContain("Dune");
+    expect(root().textContent).toContain("₹250.00");
+    expect(root().querySelector("img")?.getAttribute("src")).toBe("/Upload/dune.png");
   });
 
   it("links to the book's details page", () => {
-    const link = element().querySelector("a[href]") as HTMLAnchorElement;
+    const link = root().querySelector("a[href]") as HTMLAnchorElement;
     expect(link.getAttribute("href")).toBe("/books/details/3");
   });
 
-  it("adding to the cart asks the store to add this book", () => {
-    vi.spyOn(store, "dispatch");
-    (element().querySelector("app-addtocart button") as HTMLButtonElement).click();
-    expect(store.dispatch).toHaveBeenCalledTimes(1);
-    expect(store.dispatch).toHaveBeenCalledWith(addToCart({ bookId: 3 }));
+  it("reports which book was asked for when the cart button is clicked", () => {
+    const added: number[] = [];
+    fixture.componentInstance.addToCart.subscribe((id) => added.push(id));
+    (root().querySelector("app-addtocart button") as HTMLButtonElement).click();
+    expect(added).toEqual([3]);
   });
 
   it("offers the wishlist heart only to signed-in visitors", () => {
     expect(fixture.debugElement.query(By.css("app-addtowishlist"))).toBeNull();
 
-    store.overrideSelector(selectIsAuthenticated, true);
-    store.refreshState();
+    fixture.componentRef.setInput("signedIn", true);
     fixture.detectChanges();
 
     expect(fixture.debugElement.query(By.css("app-addtowishlist"))).not.toBeNull();
+  });
+
+  it("shows the heart ticked for a wishlisted book and reports a click on it", () => {
+    const toggles: WishlistToggle[] = [];
+    fixture.componentInstance.toggleWishlist.subscribe((t) => toggles.push(t));
+    fixture.componentRef.setInput("signedIn", true);
+    fixture.componentRef.setInput("wishlisted", true);
+    fixture.detectChanges();
+
+    (root().querySelector(".favourite-selected") as HTMLElement).click();
+
+    expect(toggles).toEqual([{ bookId: 3, isAdd: false }]);
   });
 });

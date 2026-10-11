@@ -27,7 +27,10 @@ import { combineLatest, map } from "rxjs";
 import {
   clearWishlist,
   loadWishlist,
+  toggleWishlistItem,
 } from "src/app/state/actions/wishlist.actions";
+import { addToCart } from "src/app/state/actions/cart.actions";
+import { WishlistToggle } from "src/app/models/wishlist-toggle";
 import {
   selectWishlistCallState,
   selectWishlistItems,
@@ -87,5 +90,13 @@ export class WishlistComponent {
 
   clearWishlist() {
     this.store.dispatch(clearWishlist());
+  }
+
+  addToCart(bookId: number) {
+    this.store.dispatch(addToCart({ bookId }));
+  }
+
+  toggleWishlist({ bookId, isAdd }: WishlistToggle) {
+    this.store.dispatch(toggleWishlistItem({ bookId, isAdd }));
   }
 }

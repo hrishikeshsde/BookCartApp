@@ -1,4 +1,4 @@
-@if(checkOutItems$ | async; as checkOutItems){
+@if (checkOutItems(); as checkOutItems) {
 <mat-card class="my-4">
   <mat-card-header class="custom-card-header mat-elevation-z2">
     <mat-card-title class="mat-h1">Check Out </mat-card-title>
@@ -139,7 +139,7 @@
               <td></td>
               <td></td>
               <th>Grand Total</th>
-              <th>{{ totalPrice | currency : "INR" }}</th>
+              <th>{{ totalPrice() | currency : "INR" }}</th>
             </tr>
           </tfoot>
         </table>

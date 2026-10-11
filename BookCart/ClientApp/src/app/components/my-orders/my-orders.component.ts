@@ -1,10 +1,11 @@
-import { AsyncPipe, CurrencyPipe, DatePipe } from "@angular/common";
+import { CurrencyPipe, DatePipe } from "@angular/common";
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   inject,
-  ViewChild,
-  AfterViewInit,
+  signal,
+  viewChild,
 } from "@angular/core";
 import { MatButton } from "@angular/material/button";
 import {
@@ -33,7 +34,6 @@ import {
 } from "@angular/material/table";
 import { RouterLink } from "@angular/router";
 import { Store } from "@ngrx/store";
-import { BehaviorSubject, combineLatest } from "rxjs";
 import { map } from "rxjs/operators";
 import { LoadingState } from "src/app/shared/call-state";
 import { CustomerOrder } from "src/app/models/order";
@@ -73,63 +73,53 @@ import {
     MatButton,
     CurrencyPipe,
     DatePipe,
-    AsyncPipe,
   ],
 })
-export class MyOrdersComponent implements AfterViewInit {
-  @ViewChild(MatPaginator)
-  paginator!: MatPaginator;
+export class MyOrdersComponent {
+  private readonly paginator = viewChild(MatPaginator);
 
   private readonly store = inject(Store);
   loadingState = LoadingState;
 
   displayedColumns: string[] = ["orderId", "orderDate", "cartTotal"];
-  expandedElement: CustomerOrder | null = null;
+  /** The order whose books are showing (only one at a time). */
+  protected readonly expandedElement = signal<CustomerOrder | null>(null);
 
-  private readonly searchValue$ = new BehaviorSubject<string>("");
-  private readonly paginatorReady$ = new BehaviorSubject<boolean>(false);
+  protected readonly searchValue = signal("");
+  private readonly orders = this.store.selectSignal(selectOrderItems);
+  private readonly callState = this.store.selectSignal(selectOrderCallState);
 
-  orderTableData$ = combineLatest([
-    this.store.select(selectOrderItems),
-    this.store.select(selectOrderCallState),
-    this.searchValue$,
-    this.paginatorReady$,
-  ]).pipe(
-    map(([order, callState, searchValue, paginatorReady]) => {
-      let dataSource = new MatTableDataSource(order);
+  protected readonly orderTableData = computed(() => {
+    const dataSource = new MatTableDataSource(this.orders());
 
-      // Set up custom filter predicate for searching orders
-      dataSource.filterPredicate = (data: CustomerOrder, filter: string) => {
-        const transformedFilter = filter.trim().toLowerCase();
-        // orderDate arrives from the API as an ISO string even though the model calls it a Date.
-        return (
-          data.orderId.toLowerCase().includes(transformedFilter) ||
-          String(data.orderDate).toLowerCase().includes(transformedFilter) ||
-          String(data.cartTotal).toLowerCase().includes(transformedFilter)
-        );
-      };
+    // Set up custom filter predicate for searching orders
+    dataSource.filterPredicate = (data: CustomerOrder, filter: string) => {
+      const transformedFilter = filter.trim().toLowerCase();
+      // orderDate arrives from the API as an ISO string even though the model calls it a Date.
+      return (
+        data.orderId.toLowerCase().includes(transformedFilter) ||
+        String(data.orderDate).toLowerCase().includes(transformedFilter) ||
+        String(data.cartTotal).toLowerCase().includes(transformedFilter)
+      );
+    };
 
-      // Apply the search filter if there's a search value
-      if (searchValue.length > 0) {
-        dataSource.filter = searchValue.trim().toLowerCase();
-      } else {
-        dataSource.filter = "";
+    const searchValue = this.searchValue();
+    dataSource.filter = searchValue.length > 0 ? searchValue.trim().toLowerCase() : "";
+
+    // The paginator exists once the table is on screen; the table is rebuilt then.
+    const paginator = this.paginator();
+    if (paginator) {
+      dataSource.paginator = paginator;
+      // Back to the first page when a filter is applied
+      if (dataSource.filter) {
+        paginator.firstPage();
       }
+    }
+    return { dataSource, callState: this.callState() };
+  });
 
-      // Set paginator only when it's ready
-      if (paginatorReady && this.paginator) {
-        dataSource.paginator = this.paginator;
-        // Reset to first page when filter is applied
-        if (dataSource.filter) {
-          this.paginator.firstPage();
-        }
-      }
-      return { dataSource, callState };
-    })
-  );
-
-  ngAfterViewInit() {
-    this.paginatorReady$.next(true);
+  protected toggleOrder(order: CustomerOrder) {
+    this.expandedElement.update((open) => (open === order ? null : order));
   }
 
   constructor() {
@@ -138,6 +128,6 @@ export class MyOrdersComponent implements AfterViewInit {
 
   applyFilter(event: Event) {
     const filterValue = (event.target as HTMLInputElement).value;
-    this.searchValue$.next(filterValue);
+    this.searchValue.set(filterValue);
   }
 }

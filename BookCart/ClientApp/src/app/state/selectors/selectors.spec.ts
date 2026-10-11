@@ -1,6 +1,6 @@
 import { aBook, aCartItem, aUser } from "src/app/testing/fixtures";
 import { selectIsAdmin } from "./auth.selectors";
-import { selectCurrentBookDetails, selectMaxBookPrice, selectMinBookPrice, selectSearchItemValue, } from "./book.selectors";
+import { selectBookById, selectMaxBookPrice, selectMinBookPrice, selectSearchItemValue } from "./book.selectors";
 import { selectCarttemsCount } from "./cart.selectors";
 import { selectWishlistItemsCount } from "./wishlist.selectors";
 
@@ -11,11 +11,10 @@ describe("selectors", () => {
     expect(selectMaxBookPrice.projector(books)).toBe(900);
   });
 
-  it("the current book is looked up by the id in the address", () => {
+  it("a book is looked up by its id", () => {
     const entities = { 2: aBook(2) };
-    expect(selectCurrentBookDetails.projector(entities, "2")).toEqual(aBook(2));
-    expect(selectCurrentBookDetails.projector(entities, "9")).toBeUndefined();
-    expect(selectCurrentBookDetails.projector(entities, undefined)).toBeUndefined();
+    expect(selectBookById(2).projector(entities)).toEqual(aBook(2));
+    expect(selectBookById(9).projector(entities)).toBeUndefined();
   });
 
   it("the search text defaults to empty", () => {

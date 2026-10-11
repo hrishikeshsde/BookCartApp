@@ -39,7 +39,7 @@ describe("CheckoutComponent", () => {
   afterEach(() => store.resetSelectors());
 
   it("shows the total of the cart (copies times price)", () => {
-    expect(component.totalPrice).toBe(2 * 100 + 1 * 200);
+    expect(component.totalPrice()).toBe(2 * 100 + 1 * 200);
     expect(root().textContent).toContain("₹400.00");
   });
 

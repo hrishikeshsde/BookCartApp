@@ -2,8 +2,7 @@ import { HttpErrorResponse } from "@angular/common/http";
 import { inject, Injectable } from "@angular/core";
 import { Router } from "@angular/router";
 import { Actions, createEffect, ofType } from "@ngrx/effects";
-import { Store } from "@ngrx/store";
-import { catchError, combineLatest, map, of, switchMap, take, tap } from "rxjs";
+import { catchError, map, of, switchMap, tap } from "rxjs";
 import { AuthenticationService } from "src/app/services/authentication.service";
 import { SnackbarService } from "src/app/services/snackbar.service";
 import { TokenStorage } from "src/app/services/token-storage.service";
@@ -19,14 +18,12 @@ import {
   sessionResolved,
   setAuthState,
 } from "../actions/auth.actions";
-import { selectQueryParams } from "../selectors/router.selectors";
 
 @Injectable()
 export class AuthEffects {
   private readonly actions$ = inject(Actions);
   private readonly authenticationService = inject(AuthenticationService);
   private readonly router = inject(Router);
-  private readonly store = inject(Store);
   private readonly tokenStorage = inject(TokenStorage);
   private readonly snackbarService = inject(SnackbarService);
 
@@ -34,14 +31,10 @@ export class AuthEffects {
     this.actions$.pipe(
       ofType(login),
       switchMap((action) =>
-        combineLatest([
-          this.store.select(selectQueryParams),
-          this.authenticationService.login(action.loginCredentials),
-        ]).pipe(
-          take(1),
-          map(([queryParam, response]) => {
+        this.authenticationService.login(action.loginCredentials).pipe(
+          map((response) => {
             this.tokenStorage.set(response.token);
-            this.router.navigateByUrl(safeReturnUrl(queryParam["returnUrl"]));
+            this.router.navigateByUrl(safeReturnUrl(action.returnUrl));
             return loginSuccess();
           }),
           catchError((error: unknown) =>

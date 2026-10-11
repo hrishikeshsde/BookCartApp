@@ -21,7 +21,6 @@
               "base": "dist"
             },
             "index": "src/index.html",
-            "polyfills": ["src/polyfills.ts"],
             "tsConfig": "tsconfig.app.json",
             "inlineStyleLanguage": "scss",
             "assets": ["src/favicon.ico"],
@@ -77,10 +76,6 @@
                 "@fontsource/roboto/500.css",
                 "@fontsource/material-icons/index.css",
                 "src/styles.scss"
-              ],
-              "polyfills": [
-                "zone.js",
-                "zone.js/testing"
               ]
             }
           },

@@ -47,7 +47,10 @@
       <ng-container matColumnDef="cart">
         <th mat-header-cell *matHeaderCellDef>Cart</th>
         <td mat-cell *matCellDef="let item">
-          <app-addtocart [bookId]="item.bookId"></app-addtocart>
+          <app-addtocart
+            [bookId]="item.bookId"
+            (add)="addToCart($event)"
+          ></app-addtocart>
         </td>
       </ng-container>
       <ng-container matColumnDef="wishlist">
@@ -55,7 +58,9 @@
         <td mat-cell *matCellDef="let item">
           <app-addtowishlist
             [bookId]="item.bookId"
+            [wishlisted]="true"
             [showButton]="true"
+            (toggle)="toggleWishlist($event)"
           ></app-addtowishlist>
         </td>
       </ng-container>

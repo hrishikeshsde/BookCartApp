@@ -5,7 +5,6 @@ import { TestBed } from "@angular/core/testing";
 import { provideRouter, Router } from "@angular/router";
 import { provideMockActions } from "@ngrx/effects/testing";
 import { Action } from "@ngrx/store";
-import { MockStore, provideMockStore } from "@ngrx/store/testing";
 import { Subject } from "rxjs";
 import { SnackbarService } from "src/app/services/snackbar.service";
 import { TokenStorage } from "src/app/services/token-storage.service";
@@ -13,7 +12,6 @@ import { INVALID_CREDENTIALS } from "src/app/shared/http-error";
 import { anHourAgo, aToken, inOneHour } from "src/app/testing/fixtures";
 import { collect, SnackbarStub } from "src/app/testing/helpers";
 import { login, loginFailure, loginSuccess, logout, restoreSession, sessionExpired, sessionResolved, setAuthState, } from "../actions/auth.actions";
-import { selectQueryParams } from "../selectors/router.selectors";
 import { AuthEffects } from "./auth.effects";
 
 const ROLE_CLAIM = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role";
@@ -23,7 +21,6 @@ describe("AuthEffects", () => {
   let actions$: Subject<Action>;
   let effects: AuthEffects;
   let http: HttpTestingController;
-  let store: MockStore;
   let tokens: TokenStorage;
   let navigateByUrl: Mock;
   let navigate: Mock;
@@ -37,7 +34,6 @@ describe("AuthEffects", () => {
       providers: [
         AuthEffects,
         provideMockActions(() => actions$),
-        provideMockStore({ selectors: [{ selector: selectQueryParams, value: {} }] }),
         provideHttpClient(withXhr()),
         provideHttpClientTesting(),
         provideRouter([]),
@@ -46,7 +42,6 @@ describe("AuthEffects", () => {
     });
     effects = TestBed.inject(AuthEffects);
     http = TestBed.inject(HttpTestingController);
-    store = TestBed.inject(MockStore);
     tokens = TestBed.inject(TokenStorage);
     const router = TestBed.inject(Router);
     navigateByUrl = vi.spyOn(router, "navigateByUrl").mockResolvedValue(true);
@@ -54,16 +49,14 @@ describe("AuthEffects", () => {
   });
   afterEach(() => {
     http.verify();
-    store.resetSelectors(); // an override is global: it would leak into every later spec
     localStorage.removeItem("authToken");
   });
 
   describe("login", () => {
     it("keeps the token and goes where the visitor was headed", () => {
-      store.overrideSelector(selectQueryParams, { returnUrl: "/wishlist" });
       const out = collect(effects.login$);
 
-      actions$.next(login({ loginCredentials: credentials }));
+      actions$.next(login({ loginCredentials: credentials, returnUrl: "/wishlist" }));
       const token = aToken({ userId: "7", name: "reader", exp: inOneHour() });
       http.expectOne("/api/login").flush({ token });
 
@@ -73,10 +66,9 @@ describe("AuthEffects", () => {
     });
 
     it("never follows a return URL that leaves the app", () => {
-      store.overrideSelector(selectQueryParams, { returnUrl: "//evil.com" });
       collect(effects.login$);
 
-      actions$.next(login({ loginCredentials: credentials }));
+      actions$.next(login({ loginCredentials: credentials, returnUrl: "//evil.com" }));
       http.expectOne("/api/login").flush({ token: aToken({ userId: "7" }) });
 
       expect(navigateByUrl).toHaveBeenCalledWith("/");

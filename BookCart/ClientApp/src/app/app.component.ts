@@ -9,7 +9,7 @@ import { loadCart } from "./state/actions/cart.actions";
     selector: "app-root",
     templateUrl: "./app.component.html",
     styleUrls: ["./app.component.scss"],
-    changeDetection: ChangeDetectionStrategy.Eager,
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [NavBarComponent, RouterOutlet]
 })
 export class AppComponent {

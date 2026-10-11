@@ -1,9 +1,11 @@
-import { AsyncPipe, CurrencyPipe } from "@angular/common";
+import { CurrencyPipe } from "@angular/common";
 import {
   ChangeDetectionStrategy,
   Component,
   inject,
-  ViewChild,
+  computed,
+  signal,
+  viewChild,
 } from "@angular/core";
 import { MatButton, MatIconButton } from "@angular/material/button";
 import {
@@ -34,7 +36,6 @@ import {
 } from "@angular/material/table";
 import { RouterLink } from "@angular/router";
 import { Store } from "@ngrx/store";
-import { BehaviorSubject, combineLatest, map } from "rxjs";
 import { loadBooks } from "src/app/state/actions/book.actions";
 import { selectBooks } from "src/app/state/selectors/book.selectors";
 import { DeleteBookComponent } from "../delete-book/delete-book.component";
@@ -71,36 +72,30 @@ import { DeleteBookComponent } from "../delete-book/delete-book.component";
         MatNoDataRow,
         MatPaginator,
         CurrencyPipe,
-        AsyncPipe,
     ]
 })
 export class ManageBooksComponent {
   private readonly dialog = inject(MatDialog);
   private readonly store = inject(Store);
 
-  @ViewChild(MatPaginator)
-  paginator!: MatPaginator;
+  private readonly paginator = viewChild(MatPaginator);
+  private readonly sort = viewChild(MatSort);
 
-  @ViewChild(MatSort)
-  sort!: MatSort;
+  protected readonly searchValue = signal("");
+  private readonly books = this.store.selectSignal(selectBooks);
 
-  private readonly searchValue$ = new BehaviorSubject<string>("");
-
-  bookTableData$ = combineLatest([
-    this.store.select(selectBooks),
-    this.searchValue$,
-  ]).pipe(
-    map(([books, searchValue]) => {
-      let dataSource = new MatTableDataSource(books);
-      dataSource.paginator = this.paginator;
-      dataSource.sort = this.sort;
-      if (searchValue.length > 0) {
-        dataSource.filter = searchValue.trim().toLowerCase();
-        dataSource.paginator.firstPage();
-      }
-      return dataSource;
-    })
-  );
+  // Rebuilt when the books, the search text or (once the table is on screen) the paginator and sorter change.
+  protected readonly bookTableData = computed(() => {
+    const dataSource = new MatTableDataSource(this.books());
+    dataSource.paginator = this.paginator() ?? null;
+    dataSource.sort = this.sort() ?? null;
+    const searchValue = this.searchValue();
+    if (searchValue.length > 0) {
+      dataSource.filter = searchValue.trim().toLowerCase();
+      dataSource.paginator?.firstPage();
+    }
+    return dataSource;
+  });
 
   displayedColumns: string[] = [
     "id",
@@ -117,7 +112,7 @@ export class ManageBooksComponent {
 
   applyFilter(event: Event) {
     const filterValue = (event.target as HTMLInputElement).value;
-    this.searchValue$.next(filterValue);
+    this.searchValue.set(filterValue);
   }
 
   deleteConfirm(bookId: number): void {

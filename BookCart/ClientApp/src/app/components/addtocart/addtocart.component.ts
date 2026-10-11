@@ -1,28 +1,21 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  inject,
-  Input,
+  input,
+  output,
 } from "@angular/core";
 import { MatButton } from "@angular/material/button";
 import { MatIcon } from "@angular/material/icon";
-import { Store } from "@ngrx/store";
-import { addToCart } from "src/app/state/actions/cart.actions";
 
+/** The "Add to Cart" button. It only reports the click: whoever shows it decides what adding to the cart means. */
 @Component({
-    selector: "app-addtocart",
-    templateUrl: "./addtocart.component.html",
-    styleUrls: ["./addtocart.component.scss"],
-    changeDetection: ChangeDetectionStrategy.OnPush,
-    imports: [MatButton, MatIcon]
+  selector: "app-addtocart",
+  templateUrl: "./addtocart.component.html",
+  styleUrls: ["./addtocart.component.scss"],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [MatButton, MatIcon],
 })
 export class AddtocartComponent {
-  @Input({ required: true })
-  bookId!: number;
-
-  private readonly store = inject(Store);
-
-  addBookToCart() {
-    this.store.dispatch(addToCart({ bookId: this.bookId }));
-  }
+  readonly bookId = input.required<number>();
+  readonly add = output<number>();
 }

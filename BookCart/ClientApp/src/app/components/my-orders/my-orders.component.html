@@ -1,4 +1,4 @@
-@if(orderTableData$ | async; as orderTableData){
+@if (orderTableData(); as orderTableData) {
 <mat-card class="my-4">
   <mat-card-header class="custom-card-header mat-elevation-z2">
     <mat-card-title class="mat-h1">My Orders </mat-card-title>
@@ -38,7 +38,7 @@
             >
               <div
                 class="example-element-detail"
-                [class.expanded]="element === expandedElement"
+                [class.expanded]="element === expandedElement()"
               >
                 <div class="example-element-detail-inner">
                 <mat-card class="w-100">
@@ -89,10 +89,8 @@
             mat-row
             *matRowDef="let element; columns: displayedColumns"
             class="example-element-row"
-            [class.example-expanded-row]="expandedElement === element"
-            (click)="
-              expandedElement = expandedElement === element ? null : element
-            "
+            [class.example-expanded-row]="expandedElement() === element"
+            (click)="toggleOrder(element)"
           ></tr>
           <tr
             mat-row

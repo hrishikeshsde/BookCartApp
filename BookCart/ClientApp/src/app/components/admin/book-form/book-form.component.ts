@@ -1,5 +1,13 @@
-import { AsyncPipe } from "@angular/common";
-import { ChangeDetectionStrategy, Component, inject } from "@angular/core";
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+} from "@angular/core";
 import {
   NonNullableFormBuilder,
   ReactiveFormsModule,
@@ -23,49 +31,56 @@ import {
 import { MatIcon } from "@angular/material/icon";
 import { MatInput } from "@angular/material/input";
 import { MatSelect } from "@angular/material/select";
-import { Router } from "@angular/router";
-import { Store } from "@ngrx/store";
-import { combineLatest, EMPTY } from "rxjs";
-import { catchError, map } from "rxjs/operators";
-import { SnackbarService } from "src/app/services/snackbar.service";
 import { Book } from "src/app/models/book";
-import { addBook, updateBook } from "src/app/state/actions/book.actions";
-import { loadCategories } from "src/app/state/actions/categories.actions";
-import { selectCurrentBookDetails } from "src/app/state/selectors/book.selectors";
-import { selectCategories } from "src/app/state/selectors/categories.selectors";
+import { Categories } from "src/app/models/categories";
 
+/** What the form hands over when it is saved: the fields as the API wants them, and whether this edits an existing book. */
+export interface BookFormSubmit {
+  formData: FormData;
+  isUpdate: boolean;
+}
+
+/**
+ * The add/edit book form. It is given the book to edit (none for a new one) and the categories to choose from, and
+ * reports a save or a cancel; the page around it talks to the store.
+ */
 @Component({
-    selector: "app-book-form",
-    templateUrl: "./book-form.component.html",
-    styleUrls: ["./book-form.component.scss"],
-    changeDetection: ChangeDetectionStrategy.OnPush,
-    imports: [
-        MatCard,
-        MatCardHeader,
-        MatCardTitle,
-        MatCardContent,
-        ReactiveFormsModule,
-        MatFormField,
-        MatLabel,
-        MatInput,
-        MatError,
-        MatSelect,
-        MatOption,
-        MatPrefix,
-        MatCardActions,
-        MatButton,
-        MatIcon,
-        AsyncPipe,
-    ]
+  selector: "app-book-form",
+  templateUrl: "./book-form.component.html",
+  styleUrls: ["./book-form.component.scss"],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [
+    MatCard,
+    MatCardHeader,
+    MatCardTitle,
+    MatCardContent,
+    ReactiveFormsModule,
+    MatFormField,
+    MatLabel,
+    MatInput,
+    MatError,
+    MatSelect,
+    MatOption,
+    MatPrefix,
+    MatCardActions,
+    MatButton,
+    MatIcon,
+  ],
 })
 export class BookFormComponent {
   private readonly fb = inject(NonNullableFormBuilder);
-  private readonly router = inject(Router);
-  private readonly snackBarService = inject(SnackbarService);
-  private readonly store = inject(Store);
 
-  coverImagePath = "";
-  files: FileList | null = null;
+  /** The book being edited; undefined for a new one. */
+  readonly book = input<Book>();
+  readonly categories = input<Categories[]>([]);
+  readonly save = output<BookFormSubmit>();
+  readonly cancel = output<void>();
+
+  protected readonly formTitle = computed(() =>
+    this.book()?.bookId ? "Edit" : "Add"
+  );
+  protected readonly coverImagePath = signal("");
+  private files: FileList | null = null;
 
   bookForm = this.fb.group({
     bookId: 0,
@@ -75,30 +90,21 @@ export class BookFormComponent {
     price: ["", [Validators.required, Validators.min(0)]],
   });
 
-  bookFormData$ = combineLatest([
-    this.store.select(selectCurrentBookDetails),
-    this.store.select(selectCategories),
-  ]).pipe(
-    map(([book, categoryList]) => {
-      if (book !== undefined) {
-        this.setBookFormData(book);
-      }
-      return {
-        formTitle: book?.bookId ? "Edit" : "Add",
-        categoryList,
-      };
-    }),
-    catchError((error) => {
-      this.snackBarService.showSnackBar(
-        "Error ocurred while fetching book data"
-      );
-      console.error("Error ocurred while fetching book data : ", error);
-      return EMPTY;
-    })
-  );
-
   constructor() {
-    this.store.dispatch(loadCategories());
+    // Fill the form when the book arrives (or is reloaded), but never over what the admin has already typed.
+    effect(() => {
+      const book = this.book();
+      if (book && this.bookForm.pristine) {
+        this.bookForm.setValue({
+          bookId: book.bookId,
+          title: book.title,
+          author: book.author,
+          category: book.category,
+          price: String(book.price),
+        });
+        this.coverImagePath.set("/Upload/" + book.coverFileName);
+      }
+    });
   }
 
   protected get bookFormControl() {
@@ -111,7 +117,8 @@ export class BookFormComponent {
     }
     // One field per book property, as the API binds them. Built fresh on every submit: a form object kept between
     // submits would carry the fields of the previous attempt.
-    const { bookId, title, author, category, price } = this.bookForm.getRawValue();
+    const { bookId, title, author, category, price } =
+      this.bookForm.getRawValue();
     const formData = new FormData();
     formData.append("bookId", String(bookId));
     formData.append("title", title);
@@ -121,12 +128,7 @@ export class BookFormComponent {
     if (this.files && this.files.length > 0) {
       formData.append("file", this.files[0]);
     }
-
-    if (bookId > 0) {
-      this.store.dispatch(updateBook({ book: formData }));
-    } else {
-      this.store.dispatch(addBook({ book: formData }));
-    }
+    this.save.emit({ formData, isUpdate: bookId > 0 });
   }
 
   uploadImage(event: Event) {
@@ -139,22 +141,7 @@ export class BookFormComponent {
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = () => {
-      this.coverImagePath = reader.result as string;
+      this.coverImagePath.set(reader.result as string);
     };
-  }
-
-  navigateToAdminPanel() {
-    this.router.navigate(["/admin/books"]);
-  }
-
-  private setBookFormData(bookFormData: Book) {
-    this.bookForm.setValue({
-      bookId: bookFormData.bookId,
-      title: bookFormData.title,
-      author: bookFormData.author,
-      category: bookFormData.category,
-      price: String(bookFormData.price),
-    });
-    this.coverImagePath = "/Upload/" + bookFormData.coverFileName;
   }
 }

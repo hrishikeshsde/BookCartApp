@@ -12,3 +12,8 @@ export const selectSimilarBooks = createSelector(
   selectSimilarBooksFeatureState,
   (state: SimilarBooksState) => state.similarBooks
 );
+
+export const selectSimilarBooksCallState = createSelector(
+  selectSimilarBooksFeatureState,
+  (state: SimilarBooksState) => state.callState
+);

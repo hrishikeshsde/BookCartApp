@@ -128,6 +128,12 @@ async function uiLogin(page, u) {
     await waitFn(page, () => location.pathname.startsWith('/books/details/'));
     await waitFn(page, () => document.body.innerText.includes('Smoke Book 2'));
   });
+  await step('details: opening the address directly shows the book and the books similar to it', async () => {
+    const url = page.url();
+    await page.goto(url, { waitUntil: 'networkidle2' });
+    await waitFn(page, () => document.body.innerText.includes('Smoke Book 2'));
+    await waitFn(page, () => document.querySelectorAll('app-similarbooks app-book-card').length >= 1);
+  });
   await step('register: a taken username is flagged by the async check', async () => {
     await page.goto(WEB + '/register', { waitUntil: 'networkidle2' });
     await page.type('input[formcontrolname="userName"]', ADMIN.username);
@@ -210,6 +216,15 @@ async function uiLogin(page, u) {
     await waitFn(page, () => document.body.innerText.includes('Username or Password is incorrect'));
     if (await page.evaluate(() => !!localStorage.getItem('authToken'))) throw new Error('a token was stored');
   });
+  await step('login goes back to the page the visitor was headed for', async () => {
+    await page.goto(WEB + '/wishlist', { waitUntil: 'networkidle2' });
+    await waitFn(page, () => location.pathname === '/login' && location.search.includes('returnUrl=%2Fwishlist'));
+    await page.type('input[formcontrolname="username"]', USER.username);
+    await page.type('input[formcontrolname="password"]', USER.password);
+    await clickText(page, 'form button', 'Login');
+    await waitFn(page, () => location.pathname === '/wishlist');
+    await logoutIfNeeded(page);
+  });
   await step('a returnUrl that points off-site is ignored after login', async () => {
     await page.goto(WEB + '/login?returnUrl=//evil.com', { waitUntil: 'networkidle2' });
     await page.type('input[formcontrolname="username"]', USER.username);
@@ -250,6 +265,13 @@ async function uiLogin(page, u) {
     await waitFn(page, () => location.pathname.startsWith('/admin/books/') && document.querySelector('input[formcontrolname="title"]')?.value.length > 0);
   });
 
+  await step('admin: the edit page opened by its address (a refresh) shows the book, not a blank Add form', async () => {
+    const url = page.url();
+    if (!new URL(url).pathname.match(/^\/admin\/books\/[0-9]+$/)) throw new Error('not on an edit page: ' + url);
+    await page.goto(url, { waitUntil: 'networkidle2' });
+    await waitFn(page, () => document.querySelector('input[formcontrolname="title"]')?.value.length > 0);
+    if (!(await page.evaluate(() => document.body.innerText.includes('Edit')))) throw new Error('the page says Add, not Edit');
+  });
   await browser.close();
 
   const failed = results.filter((r) => !r.ok && (!r.known || EXPECT_F1));

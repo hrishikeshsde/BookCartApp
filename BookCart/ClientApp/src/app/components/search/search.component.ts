@@ -77,6 +77,13 @@ export class SearchComponent {
     }
   }
 
+  /** Chrome fires "search" on Enter as well as on the clear button; only an empty box means "cancel". */
+  onSearchEvent() {
+    if (this.searchControl.value === "") {
+      this.cancelSearch();
+    }
+  }
+
   cancelSearch() {
     this.router.navigate(["/"]);
   }

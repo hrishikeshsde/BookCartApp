@@ -7,9 +7,6 @@ import {
   MatCardTitle,
 } from "@angular/material/card";
 import { MatProgressSpinner } from "@angular/material/progress-spinner";
-import { ActivatedRoute } from "@angular/router";
-import { switchMap } from "rxjs";
-import { BookService } from "src/app/services/book.service";
 import { BookCardComponent } from "../book-card/book-card.component";
 import { Store } from "@ngrx/store";
 import { loadSimilarBooks } from "src/app/state/actions/similar-books.actions";

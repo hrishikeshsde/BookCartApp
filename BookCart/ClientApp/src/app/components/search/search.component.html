@@ -8,10 +8,10 @@
     placeholder="Search books or authors"
     [formControl]="searchControl"
     [matAutocomplete]="auto"
-    (search)="cancelSearch()"
+    (search)="onSearchEvent()"
   />
   <mat-autocomplete (optionSelected)="searchBooks()" #auto="matAutocomplete">
-    @for (book of filterSuggetions; track book) {
+    @for (book of filterSuggetions; track book.bookId) {
     <mat-option [value]="book.title">
       {{ book.title }}
     </mat-option>

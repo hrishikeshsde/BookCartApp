@@ -238,3 +238,6 @@ BookCart/wwwroot/Upload/*
 deploy/.env
 deploy/backups/
 artifacts/
+
+# Smoke test dependencies
+scripts/smoke/node_modules/

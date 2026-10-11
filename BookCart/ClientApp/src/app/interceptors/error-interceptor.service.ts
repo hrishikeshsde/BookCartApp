@@ -1,33 +1,31 @@
-import {
-  HttpErrorResponse,
-  HttpHandlerFn,
-  HttpInterceptorFn,
-  HttpRequest,
-} from "@angular/common/http";
+import { HttpErrorResponse, HttpInterceptorFn } from "@angular/common/http";
 import { inject } from "@angular/core";
-import { Router } from "@angular/router";
 import { Store } from "@ngrx/store";
 import { throwError } from "rxjs";
 import { catchError } from "rxjs/operators";
-import { logout } from "../state/actions/auth.actions";
+import { SnackbarService } from "../services/snackbar.service";
+import { sessionExpired } from "../state/actions/auth.actions";
+import { selectIsAuthenticated } from "../state/selectors/auth.selectors";
 
-export const ErrorInterceptorService: HttpInterceptorFn = (
-  request: HttpRequest<unknown>,
-  next: HttpHandlerFn
-) => {
+/**
+ * Turns the answers that need the whole app's attention into one reaction each, and always passes the original
+ * HttpErrorResponse on (status and problem details intact) so callers can decide for themselves.
+ */
+export const errorInterceptor: HttpInterceptorFn = (request, next) => {
   const store = inject(Store);
-  const router = inject(Router);
+  const snackbar = inject(SnackbarService);
+  const signedIn = store.selectSignal(selectIsAuthenticated);
   return next(request).pipe(
     catchError((error: HttpErrorResponse) => {
-      if (error.status === 401) {
-        store.dispatch(logout());
-        if (!request.url.includes("login")) {
-          location.reload();
-        }
-      } else if (error.status === 404) {
-        router.navigate(["not-found"]);
+      if (error.status === 401 && !request.url.endsWith("/api/login")) {
+        // A wrong password at login is a 401 too, but the login page handles that one.
+        store.dispatch(sessionExpired({ hadSession: signedIn() }));
+      } else if (error.status === 403) {
+        snackbar.showSnackBar("You do not have permission to do that.");
+      } else if (error.status >= 500) {
+        snackbar.showSnackBar("Something went wrong. Please try again.");
       }
-      return throwError(() => error.message);
+      return throwError(() => error);
     })
   );
 };

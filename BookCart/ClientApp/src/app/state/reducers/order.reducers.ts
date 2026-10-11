@@ -1,6 +1,7 @@
 import { createReducer, on } from "@ngrx/store";
 import { CustomerOrder } from "src/app/models/order";
 import { CallState, LoadingState } from "src/app/shared/call-state";
+import { logout, sessionExpired } from "../actions/auth.actions";
 import {
   loadOrders,
   loadOrdersFailure,
@@ -33,5 +34,7 @@ export const orderReducer = createReducer(
   on(loadOrdersFailure, (state, { errorMessage }) => ({
     ...state,
     orderCallState: { errorMessage },
-  }))
+  })),
+  // Orders belong to the signed-in person: nothing of theirs stays in memory after they leave.
+  on(logout, sessionExpired, () => initialState)
 );

@@ -15,6 +15,17 @@ export const selectAuthenticatedUser = createSelector(
   (state) => state.user
 );
 
+/** True once the token stored from an earlier visit has been looked at (see restoreSession). */
+export const selectAuthResolved = createSelector(
+  selectAuthFeatureState,
+  (state) => state.authResolved
+);
+
+export const selectIsAdmin = createSelector(
+  selectAuthenticatedUser,
+  (user) => user?.userTypeName === "Admin"
+);
+
 export const selectLoginError = createSelector(
   selectAuthFeatureState,
   (state) => getCallStateError(state.authCallState)

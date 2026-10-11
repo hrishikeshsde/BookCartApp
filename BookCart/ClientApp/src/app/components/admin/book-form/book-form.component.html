@@ -49,7 +49,7 @@
                 formControlName="category"
                 required
               >
-                @for (category of bookFormData.categoryList; track category) {
+                @for (category of bookFormData.categoryList; track category.categoryId) {
                 <mat-option [value]="category.categoryName">
                   {{ category.categoryName }}
                 </mat-option>

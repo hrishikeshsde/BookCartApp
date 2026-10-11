@@ -7,6 +7,8 @@ import {
   loginSuccess,
   logout,
   resetLoginFormError,
+  sessionExpired,
+  sessionResolved,
   setAuthState,
 } from "../actions/auth.actions";
 
@@ -15,19 +17,23 @@ export const AUTH_FEATURE_KEY = "appAuth";
 export interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
+  /** False until the stored token has been looked at once at app start. Route guards wait for it. */
+  authResolved: boolean;
   authCallState: CallState;
 }
 
 const initialState: AuthState = {
   user: null,
   isAuthenticated: false,
+  authResolved: false,
   authCallState: LoadingState.INIT,
 };
 
 export const authReducer = createReducer(
   initialState,
-  on(login, () => ({
+  on(login, (state) => ({
     ...initialState,
+    authResolved: state.authResolved,
   })),
   on(loginSuccess, (state) => ({
     ...state,
@@ -38,14 +44,21 @@ export const authReducer = createReducer(
     ...state,
     user,
     isAuthenticated: true,
+    authResolved: true,
+  })),
+  on(sessionResolved, (state) => ({
+    ...state,
+    authResolved: true,
   })),
   on(loginFailure, (state, { errorMessage }) => ({
     ...state,
     isAuthenticated: false,
+    authResolved: true,
     authCallState: { errorMessage },
   })),
-  on(logout, () => ({
+  on(logout, sessionExpired, () => ({
     ...initialState,
+    authResolved: true,
   })),
   on(resetLoginFormError, (state) => ({
     ...state,

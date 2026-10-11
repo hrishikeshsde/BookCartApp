@@ -21,6 +21,7 @@ import {
   removeCartItemFailure,
   removeCartItemSuccess,
 } from "../actions/cart.actions";
+import { errorText } from "src/app/shared/http-error";
 
 /**
  * None of these calls names a user: the server works out whose cart it is from the login token, or else from the
@@ -39,7 +40,7 @@ export class CartEffects {
       switchMap(() =>
         this.cartService.getCartItems().pipe(
           map((shoppingCart) => loadCartSuccess({ shoppingCart })),
-          catchError((error) => of(loadCartFailure({ errorMessage: error })))
+          catchError((error) => of(loadCartFailure({ errorMessage: errorText(error) })))
         )
       )
     )
@@ -54,7 +55,7 @@ export class CartEffects {
           tap(() => {
             this.snackbarService.showSnackBar("One Item added to cart");
           }),
-          catchError((error) => of(addToCartFailure({ errorMessage: error })))
+          catchError((error) => of(addToCartFailure({ errorMessage: errorText(error) })))
         )
       )
     )
@@ -70,7 +71,7 @@ export class CartEffects {
             this.snackbarService.showSnackBar("Book removed from cart");
           }),
           catchError((error) =>
-            of(removeCartItemFailure({ errorMessage: error }))
+            of(removeCartItemFailure({ errorMessage: errorText(error) }))
           )
         )
       )
@@ -87,7 +88,7 @@ export class CartEffects {
             this.snackbarService.showSnackBar("One item removed from cart");
           }),
           catchError((error) =>
-            of(reduceCartQuantityFailure({ errorMessage: error }))
+            of(reduceCartQuantityFailure({ errorMessage: errorText(error) }))
           )
         )
       )
@@ -103,7 +104,7 @@ export class CartEffects {
           tap(() => {
             this.snackbarService.showSnackBar("Cart cleared");
           }),
-          catchError((error) => of(clearCartFailure({ errorMessage: error })))
+          catchError((error) => of(clearCartFailure({ errorMessage: errorText(error) })))
         )
       )
     )

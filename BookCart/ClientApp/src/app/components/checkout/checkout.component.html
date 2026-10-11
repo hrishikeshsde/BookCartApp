@@ -121,7 +121,7 @@
             </tr>
           </thead>
           <tbody>
-            @for (item of checkOutItems.items; track item) {
+            @for (item of checkOutItems.items; track item.book.bookId) {
             <tr>
               <td>
                 {{ item.book.title }}

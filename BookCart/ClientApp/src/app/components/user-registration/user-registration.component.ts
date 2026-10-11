@@ -64,22 +64,19 @@ export class UserRegistrationComponent {
 
   registrationForm: FormGroup<UserRegistrationForm> = this.formBuilder.group(
     {
-      firstName: new FormControl("", Validators.required),
-      lastName: new FormControl("", Validators.required),
-      userName: new FormControl(
+      firstName: ["", Validators.required],
+      lastName: ["", Validators.required],
+      userName: [
         "",
         [Validators.required],
-        this.customValidation.userNameValidator.bind(this.customValidation)
-      ),
-      password: new FormControl(
+        [this.customValidation.userNameValidator()],
+      ],
+      password: [
         "",
-        Validators.compose([
-          Validators.required,
-          this.customValidation.patternValidator(),
-        ])
-      ),
-      confirmPassword: new FormControl("", [Validators.required]),
-      gender: new FormControl("", Validators.required),
+        [Validators.required, this.customValidation.patternValidator()],
+      ],
+      confirmPassword: ["", [Validators.required]],
+      gender: ["", Validators.required],
     },
     {
       validators: [

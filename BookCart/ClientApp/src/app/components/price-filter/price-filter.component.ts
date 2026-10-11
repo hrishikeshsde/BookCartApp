@@ -59,8 +59,10 @@ export class PriceFilterComponent implements OnDestroy {
     return `${labelValue}`;
   }
 
-  onChange(event) {
-    this.subscriptionService.priceFilterValue$.next(event.target.value);
+  onChange(event: Event) {
+    this.subscriptionService.priceFilterValue$.next(
+      Number((event.target as HTMLInputElement).value)
+    );
   }
 
   ngOnDestroy(): void {

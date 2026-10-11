@@ -1,22 +1,21 @@
 import { inject, Injectable } from "@angular/core";
 import {
   AbstractControl,
-  FormControl,
+  AsyncValidatorFn,
   ValidationErrors,
   ValidatorFn,
 } from "@angular/forms";
-import { debounceTime } from "rxjs";
+import { catchError, map, Observable, of, switchMap, timer } from "rxjs";
 import { UserService } from "./user.service";
 
 @Injectable({
   providedIn: "root",
 })
 export class CustomValidationService {
-  private userService = inject(UserService);
-  private debouncer: any;
+  private readonly userService = inject(UserService);
 
   patternValidator(): ValidatorFn {
-    return (control: AbstractControl): { [key: string]: any } => {
+    return (control: AbstractControl): ValidationErrors | null => {
       if (!control.value) {
         return null;
       }
@@ -52,21 +51,21 @@ export class CustomValidationService {
     };
   }
 
-  userNameValidator(userControl: FormControl) {
-    clearTimeout(this.debouncer);
-    return new Promise((resolve) => {
-      this.debouncer = setTimeout(() => {
-        this.userService
-          .validateUserName(userControl.value)
-          .pipe(debounceTime(1000))
-          .subscribe((result) => {
-            if (result) {
-              resolve(null);
-            } else {
-              resolve({ userNameNotAvailable: true });
-            }
-          });
-      }, 1000);
-    });
+  /**
+   * Asks the server whether the name is free. Angular unsubscribes from the previous run when the value changes, so
+   * the timer is the debounce: only a name that stays put for half a second is sent.
+   */
+  userNameValidator(): AsyncValidatorFn {
+    return (control: AbstractControl): Observable<ValidationErrors | null> => {
+      if (!control.value) {
+        return of(null);
+      }
+      return timer(500).pipe(
+        switchMap(() => this.userService.validateUserName(control.value)),
+        map((available) => (available ? null : { userNameNotAvailable: true })),
+        // A failed lookup (for example the rate limit) must not block the form: registering rejects a taken name anyway.
+        catchError(() => of(null))
+      );
+    };
   }
 }

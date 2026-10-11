@@ -31,6 +31,7 @@ import {
   MatCardTitle,
 } from "@angular/material/card";
 import { Store } from "@ngrx/store";
+import { INVALID_CREDENTIALS } from "src/app/shared/http-error";
 import { LoginForm } from "src/app/models/loginForm";
 import { UserLogin } from "src/app/models/userLogin";
 import { login, resetLoginFormError } from "src/app/state/actions/auth.actions";
@@ -70,9 +71,11 @@ export class LoginComponent implements OnInit {
   });
   showPassword = false;
 
+  protected readonly invalidCredentials = INVALID_CREDENTIALS;
+
   error$ = this.store.select(selectLoginError).pipe(
     map((error) => {
-      if (error?.includes("Unauthorized")) {
+      if (error === INVALID_CREDENTIALS) {
         this.loginForm.reset();
         this.loginForm.setErrors({ invalidCredentials: true });
       }

@@ -2,7 +2,7 @@ import { Component, inject } from "@angular/core";
 import { RouterOutlet } from "@angular/router";
 import { Store } from "@ngrx/store";
 import { NavBarComponent } from "./components/nav-bar/nav-bar.component";
-import { loginSuccess } from "./state/actions/auth.actions";
+import { restoreSession } from "./state/actions/auth.actions";
 import { loadCart } from "./state/actions/cart.actions";
 
 @Component({
@@ -15,7 +15,8 @@ export class AppComponent {
   private readonly store = inject(Store);
 
   constructor() {
-    this.store.dispatch(loginSuccess());
+    // Pick up the session of an earlier visit (the stored token), if there is one.
+    this.store.dispatch(restoreSession());
     // A returning visitor's cart (a guest's too) is on the server: fetch it so the badge is right from the start.
     this.store.dispatch(loadCart());
   }

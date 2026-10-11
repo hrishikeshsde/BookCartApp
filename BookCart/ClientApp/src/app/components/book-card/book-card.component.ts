@@ -35,8 +35,8 @@ import { AddtowishlistComponent } from "../addtowishlist/addtowishlist.component
     ]
 })
 export class BookCardComponent {
-  @Input()
-  book: Book;
+  @Input({ required: true })
+  book!: Book;
 
   isActive = false;
 

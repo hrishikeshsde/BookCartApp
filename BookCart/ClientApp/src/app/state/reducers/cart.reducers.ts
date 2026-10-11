@@ -1,7 +1,7 @@
 import { createReducer, on } from "@ngrx/store";
 import { ShoppingCart } from "src/app/models/shoppingcart";
 import { CallState, LoadingState } from "src/app/shared/call-state";
-import { logout } from "../actions/auth.actions";
+import { logout, sessionExpired } from "../actions/auth.actions";
 import {
   addToCart,
   addToCartFailure,
@@ -90,7 +90,7 @@ export const cartReducer = createReducer(
     ...state,
     cartCallState: LoadingState.LOADING,
   })),
-  on(clearCartSuccess, (state) => ({
+  on(clearCartSuccess, (state): CartState => ({
     ...state,
     shoppingCart: [],
     cartCallState: LoadingState.LOADED,
@@ -99,7 +99,7 @@ export const cartReducer = createReducer(
     ...state,
     cartCallState: { errorMessage },
   })),
-  on(logout, (state) => ({
+  on(logout, sessionExpired, (state): CartState => ({
     ...state,
     shoppingCart: [],
     cartCallState: LoadingState.INIT,

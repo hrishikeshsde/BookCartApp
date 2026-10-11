@@ -60,7 +60,7 @@ jobs:
           if-no-files-found: ignore
 
   frontend:
-    name: Frontend (build)
+    name: Frontend (unit tests, build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -74,6 +74,8 @@ jobs:
           cache-dependency-path: BookCart/ClientApp/package-lock.json
       # .npmrc sets legacy-peer-deps (the @ngrx 19 packages declare Angular 19 as a peer; the app runs Angular 20).
       - run: npm ci
+      # Headless Chrome ships on the runner; the CI launcher turns off its sandbox, which a container cannot use.
+      - run: npx ng test --watch=false --browsers=ChromeHeadlessCI
       - run: npm run build -- --configuration production
 
   container:

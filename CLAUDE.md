@@ -20,12 +20,12 @@ Backend (run from `BookCart/`):
 Frontend (run from `BookCart/ClientApp/`):
 - `npm start`: runs `ng serve` on port 53424 over HTTPS, using the ASP.NET dev cert (the `prestart` step runs `aspnetcore-https.js` to generate it).
 - `npm run build`
-- `npm test`: runs Karma/Jasmine tests in Chrome.
-- To run one spec file: `npx ng test --include src/app/services/cart.service.spec.ts`
+- `npm test`: runs the Karma/Jasmine unit tests once in headless Chrome (`npm run test:watch` keeps a visible Chrome open). To run one spec file: `npx ng test --watch=false --include src/app/services/token-storage.service.spec.ts`. A spec that uses `provideMockStore` selector overrides must call `store.resetSelectors()` in `afterEach`: overrides are global and leak into other specs otherwise.
+- `scripts/smoke` is a Chrome click-through of the real app (browse, guest cart, register, login, checkout, wishlist, admin, session expiry); see `docs/FRONTEND_CHANGES.md` for how to run it.
 
 Backend tests (run from the repo root): `dotnet test BookCart.Tests -c Release`. Prefer `-c Release`: a Debug build of `BookCart` also installs the client's packages, which the tests do not need. The tests host the real API on a throwaway LocalDB database `BookDB_Test` that `ApiFactory` drops and rebuilds with the real migrations on every run; the migration/upgrade/schema tests use further scratch databases (`BookDB_Test_*`, dropped afterwards). Set `BOOKCART_TEST_DB` to use another SQL Server, and never point it at a real database.
 
-There is no frontend lint configuration. CI (`.github/workflows/ci.yml`) runs the format check, a warnings-as-errors build and the tests against a SQL Server container (`BOOKCART_TEST_DB`), builds the Angular app, and builds the image archive.
+There is no frontend lint configuration. CI (`.github/workflows/ci.yml`) runs the format check, a warnings-as-errors build and the tests against a SQL Server container (`BOOKCART_TEST_DB`), the Angular unit tests (headless Chrome) and production build, and builds the image archive.
 
 ## Setup prerequisites
 
@@ -60,12 +60,13 @@ There is no frontend lint configuration. CI (`.github/workflows/ci.yml`) runs th
 
 - The app is all standalone components with no NgModules. `main.ts` bootstraps with `provideRouter`, `provideHttpClient(withInterceptors(...))`, and NgRx.
 - Services call relative URLs (`/api/...`) and never send a user id: the server knows the caller from the JWT or the guest cookie. In development, `proxy.conf.js` forwards `/api`, `/Upload`, `/openapi` and `/scalar` to the ASP.NET backend.
-- `interceptors/http-interceptor.service.ts` reads the JWT from `localStorage["authToken"]` and adds the Bearer header. `error-interceptor.service.ts` handles error responses.
+- The login token is read and written only by `services/token-storage.service.ts` (`TokenStorage`): a malformed or expired token counts as no token, and it builds the signed-in `User` from the JWT payload. `authTokenInterceptor` adds the Bearer header from it. `errorInterceptor` always passes the original `HttpErrorResponse` on; a 401 (except from `/api/login`) dispatches `sessionExpired` (token removed, user/cart/wishlist/orders state reset, back to login with a `returnUrl`; never a page reload), 403 and 5xx show a snackbar. Effects store failures with `errorText(error)` (`shared/http-error.ts`), never the raw error. `returnUrl` goes through `safeReturnUrl` (`shared/return-url.ts`).
+- At start `AppComponent` dispatches `restoreSession`: a valid stored token sets the user, otherwise `sessionResolved`. The auth state's `authResolved` flag tells the route guards when the token has been looked at.
 - State management uses NgRx under `state/`, split into `actions/`, `reducers/`, `effects/` and `selectors/`, one file per feature in each:
   - Global features registered in `main.ts`: auth, books, categories, cart, wishlist, and router-store.
   - Route-scoped features registered through `providers` on routes in `routes/app.routes.ts`: register, similar-books, orders, checkout. A new lazily loaded feature should follow this route-scoped pattern.
   - Effects are classes that use `inject()`. Cart effects need no user at all; wishlist, order and checkout effects only check that someone is signed in before calling the API. The cart reloads on app start, on `setAuthState` (a login merges the guest cart on the server) and after a checkout.
   - Reducers track request status with `CallState` from `shared/call-state.ts` (`LoadingState` or `{ errorMessage }`).
-- Routes: all pages except Home are lazy-loaded with `loadComponent`. `AuthGuard` protects checkout, myorders and wishlist. `AdminAuthGuard` protects `admin/books`, whose child routes are in `routes/admin.routes.ts`.
+- Routes: all pages except Home are lazy-loaded with `loadComponent`. `authGuard` (a `CanActivateFn`) protects checkout, myorders and wishlist; `adminGuard` (a `CanMatchFn`) protects `admin/books`, whose child routes are in `routes/admin.routes.ts`. Both wait for `authResolved` and return a `UrlTree`: a guest goes to `/login?returnUrl=...`, a signed-in non-admin goes home.
 - `SubscriptionService` keeps one piece of state outside NgRx: the price-filter value, held in a `BehaviorSubject`.
-- Path imports use the `src/app/...` form, resolved through `baseUrl` in tsconfig.
+- Path imports use the `src/app/...` form, resolved through `baseUrl` in tsconfig. TypeScript is `strict`; models are interfaces; fonts and icons are self-hosted (`@fontsource/roboto`, `@fontsource/material-icons`), nothing is loaded from a CDN.

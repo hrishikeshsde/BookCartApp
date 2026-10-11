@@ -1,43 +1,27 @@
-import { inject, Injectable } from "@angular/core";
-import {
-  ActivatedRouteSnapshot,
-  Router,
-  RouterStateSnapshot,
-  UrlTree,
-} from "@angular/router";
+import { inject } from "@angular/core";
+import { CanActivateFn, Router } from "@angular/router";
 import { Store } from "@ngrx/store";
-import { map, Observable } from "rxjs";
-import { selectIsAuthenticated } from "../state/selectors/auth.selectors";
+import { filter, map, switchMap, take } from "rxjs";
+import {
+  selectAuthResolved,
+  selectIsAuthenticated,
+} from "../state/selectors/auth.selectors";
 
-@Injectable({
-  providedIn: "root",
-})
-export class AuthGuard {
-  private readonly store = inject(Store);
-  private readonly router = inject(Router);
-
-  canActivate(
-    route: ActivatedRouteSnapshot,
-    state: RouterStateSnapshot
-  ):
-    | Observable<boolean | UrlTree>
-    | Promise<boolean | UrlTree>
-    | boolean
-    | UrlTree {
-    if (localStorage.getItem("authToken")) {
-      return true;
-    }
-
-    return this.store.select(selectIsAuthenticated).pipe(
-      map((isAuthenticated) => {
-        if (isAuthenticated) {
-          return true;
-        }
-        this.router.navigate(["/login"], {
-          queryParams: { returnUrl: state.url },
-        });
-        return false;
-      })
-    );
-  }
-}
+/** Lets a signed-in visitor through; anyone else goes to the login page and comes back to where they were headed. */
+export const authGuard: CanActivateFn = (_route, state) => {
+  const router = inject(Router);
+  const store = inject(Store);
+  return store.select(selectAuthResolved).pipe(
+    filter(Boolean),
+    take(1),
+    switchMap(() => store.select(selectIsAuthenticated)),
+    take(1),
+    map((signedIn) =>
+      signedIn
+        ? true
+        : router.createUrlTree(["/login"], {
+            queryParams: { returnUrl: state.url },
+          })
+    )
+  );
+};

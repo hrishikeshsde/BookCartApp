@@ -1,0 +1,11 @@
+{
+  "name": "bookcart-smoke",
+  "private": true,
+  "description": "Browser click-through of the BookCart SPA (not part of the app build)",
+  "scripts": {
+    "smoke": "node smoke.js"
+  },
+  "dependencies": {
+    "puppeteer-core": "^24.0.0"
+  }
+}

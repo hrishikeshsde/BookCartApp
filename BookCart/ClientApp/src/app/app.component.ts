@@ -1,10 +1,8 @@
-import { Component, inject, ChangeDetectionStrategy } from "@angular/core";
+import { Component, ChangeDetectionStrategy } from "@angular/core";
 import { RouterOutlet } from "@angular/router";
-import { Store } from "@ngrx/store";
 import { NavBarComponent } from "./components/nav-bar/nav-bar.component";
-import { restoreSession } from "./state/actions/auth.actions";
-import { loadCart } from "./state/actions/cart.actions";
 
+// The stored session (AuthStore) and the visitor's cart (CartStore) are picked up when the nav bar first uses them.
 @Component({
     selector: "app-root",
     templateUrl: "./app.component.html",
@@ -12,13 +10,4 @@ import { loadCart } from "./state/actions/cart.actions";
     changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [NavBarComponent, RouterOutlet]
 })
-export class AppComponent {
-  private readonly store = inject(Store);
-
-  constructor() {
-    // Pick up the session of an earlier visit (the stored token), if there is one.
-    this.store.dispatch(restoreSession());
-    // A returning visitor's cart (a guest's too) is on the server: fetch it so the badge is right from the start.
-    this.store.dispatch(loadCart());
-  }
-}
+export class AppComponent {}

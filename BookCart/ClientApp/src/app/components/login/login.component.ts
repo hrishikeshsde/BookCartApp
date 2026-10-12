@@ -30,12 +30,10 @@ import {
   MatCardSubtitle,
   MatCardTitle,
 } from "@angular/material/card";
-import { Store } from "@ngrx/store";
 import { INVALID_CREDENTIALS } from "src/app/shared/http-error";
 import { LoginForm } from "src/app/models/loginForm";
 import { UserLogin } from "src/app/models/userLogin";
-import { login, resetLoginFormError } from "src/app/state/actions/auth.actions";
-import { selectLoginError } from "src/app/state/selectors/auth.selectors";
+import { AuthStore } from "src/app/state/auth/auth.store";
 
 @Component({
     selector: "app-login",
@@ -64,7 +62,7 @@ export class LoginComponent implements OnInit {
   /** Where to go after a successful login: the guards put the page the visitor was headed for in the address (?returnUrl=). */
   readonly returnUrl = input<string>();
 
-  private readonly store = inject(Store);
+  private readonly auth = inject(AuthStore);
   private readonly formBuilder = inject(NonNullableFormBuilder);
 
   protected loginForm: FormGroup<LoginForm> = this.formBuilder.group({
@@ -75,7 +73,7 @@ export class LoginComponent implements OnInit {
 
   protected readonly invalidCredentials = INVALID_CREDENTIALS;
 
-  protected readonly error = this.store.selectSignal(selectLoginError);
+  protected readonly error = this.auth.error;
 
   constructor() {
     // A wrong password empties the form and flags it, so the message below shows until the visitor types again.
@@ -88,7 +86,7 @@ export class LoginComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.store.dispatch(resetLoginFormError());
+    this.auth.resetLoginError();
   }
 
   protected get loginFormControl() {
@@ -97,12 +95,10 @@ export class LoginComponent implements OnInit {
 
   login() {
     if (this.loginForm.valid) {
-      this.store.dispatch(
-        login({
-          loginCredentials: this.loginForm.value as UserLogin,
-          returnUrl: this.returnUrl(),
-        })
-      );
+      this.auth.login({
+        credentials: this.loginForm.value as UserLogin,
+        returnUrl: this.returnUrl(),
+      });
     }
   }
 }

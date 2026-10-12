@@ -12,7 +12,8 @@ All phases are done on one branch (`modernize/f1-security`, created by the repo 
 | F2 | Test infrastructure | Done (not yet run on GitHub CI) |
 | F3 | Upgrade to Angular 22 (and Vitest) | Done |
 | F4 | Signals, smart/dumb components, zoneless | Done |
-| F5 to F7 | SignalStore, styling, SSR | Not started |
+| F5 | State management: classic NgRx to SignalStore | Done |
+| F6 to F7 | Styling, SSR | Not started |
 
 ## Step 0: baseline
 
@@ -187,7 +188,7 @@ Branch `modernize/f4-signals` (created by the repo owner).
 
 ### F4 follow-ups (what is left over, and where to pick it up)
 
-Nothing here blocks F5. Each row says what to do, so a later session can start without re-deriving it.
+Status after F5: F4-1 and F4-2 are done in F5 (every component reads signals; the search box text comes from the address). F4-3 is partly done (`my-orders` and `manage-books` have specs now; `book-summary`, `delete-book`, `wishlist` and `page-not-found` still have none). F4-4 was repeated in F5 on the new stores (24 of 24 caught). F4-5 to F4-9 are open. Each row says what to do, so a later session can start without re-deriving it.
 
 | # | Left over | What to do | Belongs to |
 |---|---|---|---|
@@ -202,6 +203,58 @@ Nothing here blocks F5. Each row says what to do, so a later session can start w
 | F4-9 | The book form checks nothing about the chosen cover on the client (the API enforces `.jpg/.jpeg/.png/.webp`, 2 MB, matching content; a bad file is a 400). | Optional: check type and size before upload and show the message in the form. | Optional |
 
 
+## F5: state management, classic NgRx to SignalStore
+
+Branch `modernize/f5-signalstore` (created by the repo owner). `@ngrx/store`, `@ngrx/effects`, `@ngrx/entity` and `@ngrx/store-devtools` are uninstalled; `@ngrx/signals` is added and `@ngrx/operators` stays (for `tapResponse`). `src/app/state/{actions,reducers,selectors,effects}` (about 3,300 lines with their specs) are gone; each slice is one store file under `src/app/state/<slice>/`. `main.ts` registers nothing: every store is `providedIn: "root"`.
+
+**Building block.** `shared/with-call-state.ts` adds `callState` (`"init" | "loading" | "loaded" | { error }`) to a store with `loading`, `loaded` and `error` (the text or null), and `setLoading()`, `setLoaded()`, `setError(text)`, `setInit()`. It replaces `shared/call-state.ts` (the `LoadingState` enum). `models/customtheme.ts` (unused) is deleted too.
+
+| Store | State and what it does |
+|---|---|
+| `CategoriesStore` | `categories`; `load()` fetches once (a second call while loading or loaded sends nothing; after an error it retries). |
+| `SimilarBooksStore` | `books`; `load(bookId)` takes a number or a signal of one (`book-details` passes its id signal), and moving to another book cancels the earlier request (`switchMap`). |
+| `RegisterStore` | `register(details)`; success says so and goes to login, failure says to try again. |
+| `BooksStore` | `withEntities` keyed by `bookId`; `priceRange` (one pass, no spread into `Math.min`); `load()` fetches once per session; `add`, `update`, `remove` change the list in place, say so, and `add`/`update` return to the admin list. `callState` is about fetching the list only. |
+| `AuthStore` | `user`, `isAuthenticated`, `isAdmin`, `userId`; `login({ credentials, returnUrl })`, `logout()`, `expireSession()`, `resetLoginError()`. `callState` is the login attempt (`error()` is `INVALID_CREDENTIALS` for a 401). The stored token is read once when the store is created. |
+| `CartStore` | `items`, `count` (copies), `total`; `load`, `add`, `remove`, `reduce`, `clear`. Loads when created (the guest's cart too) and again whenever someone signs in; signing out empties it. |
+| `WishlistStore` | `items`, `count`, `ids`; `load`, `toggle`, `clear`. Loads on sign-in, empties on sign-out; a guest's call is refused locally with "User not found". |
+| `OrdersStore` | `orders`; `load()`; empties on sign-out. |
+
+**Session wiring.** `AuthStore` knows nothing about the others. `CartStore`, `WishlistStore` and `OrdersStore` watch `auth.userId()` in an `effect` inside `withHooks` and reload or empty themselves. That replaces `setAuthState`, `logout` and `sessionExpired` being handled in every reducer and effect. Because the token is read synchronously at creation, `restoreSession`, `sessionResolved`, `loginSuccess` and the `authResolved` flag no longer exist: the guards (`authGuard`, `adminGuard`) read `AuthStore` and answer at once, and `AppComponent` is empty (the nav bar creates the stores). `errorInterceptor` calls `auth.expireSession()`.
+
+**Checkout has no store** (as the plan says). `CheckoutComponent` calls `CheckoutService.placeOrder()` and then shows the message, goes to My Orders and calls `cart.load()` (the server emptied the cart; the plan's `cart.clear()` would send a pointless DELETE). New: `placing` blocks a second submit and disables the button while the order is under way.
+
+**Components.** All of them inject stores instead of `Store`: no `dispatch`, no selectors, no async pipe left (`nav-bar`, `book-details`, `shoppingcart`, `wishlist`, `delete-book` were the last). `book-form-page` finds its book with `entityMap()[id]` (no `toObservable`/`toSignal`). The nav bar reads the search text from the address (`?item=` of `/search`), so the store no longer holds it and `home` no longer writes it from an effect.
+
+**Behaviour that changed on purpose**
+- The catalogue and the categories are fetched once per session, not on every visit to home, a book page or manage-books (the plan, F5.3). Admin add, update and delete change the list in place.
+- Admin add, update and delete no longer flip the list's `callState` to loading, so nothing flashes while the admin saves.
+- The wishlist and My Orders pages still fetch each time they open.
+- Checkout cannot be submitted twice while the first is under way.
+
+**Result**
+| | F4 | F5 |
+|---|---|---|
+| Initial bundle | 1.05 MB raw / 213.0 kB transfer (51 kB over budget) | 997.47 kB raw / 199.33 kB transfer, under the 1 MB budget |
+| Unit tests | 206 | 224 (a spec per store, no `MockStore`) |
+| Smoke test | 25 of 25 | 25 of 25 |
+| Mutation check | n/a | 24 deliberate breakages of the new stores, guards, interceptor, checkout and nav bar: 23 caught at first; the one that escaped (the nav bar showing `?item=` on a page that is not the search page) got a test and is caught. Every file was restored byte for byte. |
+
+**Network check** (guest, dev server): opening home sends one GET each for the cart, the books and the categories; adding a book sends one POST and nothing else; opening a book page sends only the similar-books GET (the books are already here); going back sends nothing. A full page load of `/shopping-cart` sends the cart GET twice (the store's start load and the page's own), as before.
+
+**Testing pattern.** A store spec injects the real store with `provideHttpClient(withXhr())`, `provideHttpClientTesting()`, a stubbed router and `SnackbarStub`, and flushes the requests; stores that follow the session (cart, wishlist, orders) are driven through `TestBed.inject(AuthStore).login(...)` or `.logout()` and `TestBed.tick()` (that runs their effects). Component specs provide fakes from `src/app/testing/fake-stores.ts` and `fake-books-store.ts` (the same signals, with spies for the methods) and change what the component shows by setting a signal.
+
+### F5 follow-ups
+
+| # | Left over | What to do | Belongs to |
+|---|---|---|---|
+| F5-1 | No devtools for the stores (they went with `@ngrx/store-devtools`). | Optional: `@angular-architects/ngrx-toolkit` `withDevtools()` in dev builds only. | Optional |
+| F5-2 | The catalogue is fetched once per session, so a book another admin changes shows only after a reload. The server caches it for 5 minutes anyway. | If it matters: a `refresh()` in `BooksStore` called when manage-books opens or on a timer. | Optional |
+| F5-3 | The plan's `filters` and `filtered` in the books store were not added: the filters are the route inputs and the price slider, and they live in `home`. | Keep; revisit only if a second page needs the same filtering. | Decision |
+| F5-4 | A full load of `/shopping-cart` sends `GET /api/shoppingcart` twice (`CartStore` at start, then the page's `load()`). | Drop the page's `load()` (every cart call answers with the whole cart) or skip a load while one is under way. | Cleanup |
+| F5-5 | A failed cart, wishlist or orders call records `error()`, but no page shows it (only the interceptor's 403 and 5xx messages show), as before F5. | Show `error()` on the page, or a snackbar from the store. | Optional |
+| F5-6 | Every store is `providedIn: "root"`, so state stays after leaving a page (the similar books, the register status). Nothing needs a clean start today. | Reset in the page that needs one. | Note |
+
 ## Differences from the plan
 
 | Plan said | Done | Why |
@@ -213,15 +266,21 @@ Nothing here blocks F5. Each row says what to do, so a later session can start w
 | Replace guest cart id in F1.4 | Nothing to do | The backend phases did it |
 | F4.3 `selectSignal` for all ~40 call sites | Only in components rewritten for F4 | The plan itself says slices that F5 migrates can skip it |
 | F4.4 `book-form` becomes dumb | A new routed `book-form-page` holds the store code | Fixes the blank form on refresh |
+| F5 slice order: categories, similar-books, register, order, wishlist, cart, books, auth | categories, similar-books, register, books, then auth with wishlist, cart and orders together | Those four react to sign-in and sign-out, so they cannot sit half on classic NgRx and half on stores; books and the first three do not depend on the session |
+| F5.3 auth: `resolved` flag, `toObservable(auth.resolved)` in the guards | No `resolved` state; guards are synchronous | The stored token is read in `onInit`, so it is always "looked at" before anything renders |
+| F5.3 checkout calls `cart.clear()` afterwards | Calls `cart.load()` | The server already emptied the cart; `clear()` would send a DELETE for nothing |
+| F5.3 books store with `selectedId`, `filters`, `filtered` | Entities, price range and the mutation methods only | The filters come from the route inputs and stay in `home` (F5-3) |
+| F5.4 optional `withDevtools` | Not added | F5-1 |
 
 ## Open items
 
 | # | Item | Belongs to |
 |---|---|---|
 | 1 | Token transport is still `localStorage` (readable by any script). The plan's target is an HttpOnly cookie, which needs backend work (set the cookie at login, `SameSite=Strict`, antiforgery for state-changing calls); `TokenStorage` and the interceptors are the only places to change. | Backend + F1 follow-up |
-| 2 | The initial bundle is 1.10 MB against the 1 MB budget. | F6 |
-| 3 | No specs for `my-orders`, `manage-books`, `book-summary`, `delete-book`, `wishlist` and `page-not-found` (F4-3); the mutation check was not repeated on the F4 code (F4-4); the smoke test does not fail on console errors (F4-5); the CI test step has not run on GitHub. | F2 follow-up |
+| 2 | The initial bundle is 997 kB, just under the 1 MB budget (it was 1.10 MB before F4 and F5). The budget itself is still to be tightened. | F6 |
+| 3 | No specs for `book-summary`, `delete-book`, `wishlist` and `page-not-found` (the rest of F4-3); the mutation check was not repeated on the F4 components (it was run on the F5 stores, F4-4); the smoke test does not fail on console errors (F4-5); the CI test step has not run on GitHub. | F2 follow-up |
 | 4 | `book-summary` still loads the Gemini sparkle image from `gstatic.com`. | F6 |
 | 5 | `withXhr()` (added by the Angular 22 migrations to keep today's behaviour) stays until F6 (`withFetch()`). | F6 |
-| 6 | The five `store.select` + async pipe sites (F4-1) and the search text in the store (F4-2) move with their slices to SignalStore. | F5 |
+| 6 | Done in F5: F4-1 (no async pipe left) and F4-2 (search text read from the address). | Done |
+| 8 | The F5 follow-ups (F5-1 to F5-6) above. | Optional, F6 |
 | 7 | Smoke test cleanup: drop the `known` flag and `--expect-f1`, add the run helper to the repo (F4-6); Default_image NG0913 (F4-7); small test and form items (F4-8, F4-9). See the F4 follow-ups table. | Cleanup, F6 |

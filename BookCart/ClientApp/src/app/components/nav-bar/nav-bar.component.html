@@ -14,7 +14,7 @@
       ></app-search>
     </div>
     <div class="d-flex align-items-center">
-      @if (userState$ | async; as userState) { @if (userState.isAuthenticated) {
+      @if (userState(); as userState) { @if (userState.isAuthenticated) {
       <button
         mat-icon-button
         [routerLinkActive]="['link-active']"

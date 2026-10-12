@@ -33,15 +33,8 @@ import {
   MatTableDataSource,
 } from "@angular/material/table";
 import { RouterLink } from "@angular/router";
-import { Store } from "@ngrx/store";
-import { map } from "rxjs/operators";
-import { LoadingState } from "src/app/shared/call-state";
 import { CustomerOrder } from "src/app/models/order";
-import { loadOrders } from "src/app/state/actions/order.actions";
-import {
-  selectOrderCallState,
-  selectOrderItems,
-} from "src/app/state/selectors/order.selectors";
+import { OrdersStore } from "src/app/state/orders/orders.store";
 
 @Component({
   selector: "app-my-orders",
@@ -78,16 +71,14 @@ import {
 export class MyOrdersComponent {
   private readonly paginator = viewChild(MatPaginator);
 
-  private readonly store = inject(Store);
-  loadingState = LoadingState;
+  private readonly ordersStore = inject(OrdersStore);
 
   displayedColumns: string[] = ["orderId", "orderDate", "cartTotal"];
   /** The order whose books are showing (only one at a time). */
   protected readonly expandedElement = signal<CustomerOrder | null>(null);
 
   protected readonly searchValue = signal("");
-  private readonly orders = this.store.selectSignal(selectOrderItems);
-  private readonly callState = this.store.selectSignal(selectOrderCallState);
+  private readonly orders = this.ordersStore.orders;
 
   protected readonly orderTableData = computed(() => {
     const dataSource = new MatTableDataSource(this.orders());
@@ -115,7 +106,7 @@ export class MyOrdersComponent {
         paginator.firstPage();
       }
     }
-    return { dataSource, callState: this.callState() };
+    return { dataSource, loading: this.ordersStore.loading() };
   });
 
   protected toggleOrder(order: CustomerOrder) {
@@ -123,7 +114,7 @@ export class MyOrdersComponent {
   }
 
   constructor() {
-    this.store.dispatch(loadOrders());
+    this.ordersStore.load();
   }
 
   applyFilter(event: Event) {

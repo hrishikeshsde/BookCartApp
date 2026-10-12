@@ -24,11 +24,10 @@ import { MatIcon } from "@angular/material/icon";
 import { MatInput } from "@angular/material/input";
 import { MatRadioButton, MatRadioGroup } from "@angular/material/radio";
 import { RouterLink } from "@angular/router";
-import { Store } from "@ngrx/store";
 import { UserRegistration } from "src/app/models/userRegistration";
 import { UserRegistrationForm } from "src/app/models/userRegistrationForm";
 import { CustomValidationService } from "src/app/services/custom-validation.service";
-import { register } from "src/app/state/actions/auth.actions";
+import { RegisterStore } from "src/app/state/register/register.store";
 
 @Component({
     selector: "app-user-registration",
@@ -57,7 +56,7 @@ import { register } from "src/app/state/actions/auth.actions";
 export class UserRegistrationComponent {
   private readonly customValidation = inject(CustomValidationService);
   private readonly formBuilder = inject(NonNullableFormBuilder);
-  private readonly store = inject(Store);
+  private readonly registerStore = inject(RegisterStore);
 
   showPassword = true;
   showConfirmPassword = true;
@@ -91,10 +90,8 @@ export class UserRegistrationComponent {
 
   registerUser(): void {
     if (this.registrationForm.valid) {
-      this.store.dispatch(
-        register({
-          userdetails: this.registrationForm.value as UserRegistration,
-        })
+      this.registerStore.register(
+        this.registrationForm.value as UserRegistration
       );
     }
   }

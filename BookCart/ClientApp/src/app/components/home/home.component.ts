@@ -2,33 +2,17 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  effect,
   inject,
   input,
-  OnDestroy,
   signal,
 } from "@angular/core";
 import { MatProgressSpinner } from "@angular/material/progress-spinner";
-import { Store } from "@ngrx/store";
 import { WishlistToggle } from "src/app/models/wishlist-toggle";
-import { LoadingState } from "src/app/shared/call-state";
-import {
-  loadBooks,
-  resetSearchItemValue,
-  setSearchItemValue,
-} from "src/app/state/actions/book.actions";
-import { addToCart } from "src/app/state/actions/cart.actions";
-import { loadCategories } from "src/app/state/actions/categories.actions";
-import { toggleWishlistItem } from "src/app/state/actions/wishlist.actions";
-import { selectIsAuthenticated } from "src/app/state/selectors/auth.selectors";
-import {
-  selectBookCallState,
-  selectBooks,
-  selectMaxBookPrice,
-  selectMinBookPrice,
-} from "src/app/state/selectors/book.selectors";
-import { selectCategories } from "src/app/state/selectors/categories.selectors";
-import { selectWishlistItems } from "src/app/state/selectors/wishlist.selectors";
+import { BooksStore } from "src/app/state/books/books.store";
+import { AuthStore } from "src/app/state/auth/auth.store";
+import { CartStore } from "src/app/state/cart/cart.store";
+import { CategoriesStore } from "src/app/state/categories/categories.store";
+import { WishlistStore } from "src/app/state/wishlist/wishlist.store";
 import { BookCardComponent } from "../book-card/book-card.component";
 import { BookFilterComponent } from "../book-filter/book-filter.component";
 import { PriceFilterComponent } from "../price-filter/price-filter.component";
@@ -46,34 +30,30 @@ import { PriceFilterComponent } from "../price-filter/price-filter.component";
     MatProgressSpinner,
   ],
 })
-export class HomeComponent implements OnDestroy {
-  private readonly store = inject(Store);
+export class HomeComponent {
+  private readonly booksStore = inject(BooksStore);
+  private readonly categoriesStore = inject(CategoriesStore);
+  private readonly cart = inject(CartStore);
+  private readonly wishlist = inject(WishlistStore);
 
   /** ?category= (lower case), set by the category list. */
   readonly category = input<string>();
   /** ?item= (lower case), set by the search box. */
   readonly item = input<string>();
 
-  private readonly books = this.store.selectSignal(selectBooks);
-  private readonly bookCallState = this.store.selectSignal(selectBookCallState);
-  private readonly minPrice = this.store.selectSignal(selectMinBookPrice);
-  private readonly maxPrice = this.store.selectSignal(selectMaxBookPrice);
-  private readonly wishlist = this.store.selectSignal(selectWishlistItems);
-  protected readonly categories = this.store.selectSignal(selectCategories);
-  protected readonly signedIn = this.store.selectSignal(selectIsAuthenticated);
+  private readonly books = this.booksStore.entities;
+  protected readonly categories = this.categoriesStore.categories;
+  protected readonly signedIn = inject(AuthStore).isAuthenticated;
 
   /** The most a visitor wants to pay: the price slider moves it. */
   protected readonly priceFilter = signal(Number.MAX_SAFE_INTEGER);
 
-  protected readonly priceRange = computed(() =>
-    this.books().length > 0
-      ? { minPrice: this.minPrice() ?? 0, maxPrice: this.maxPrice() ?? 0 }
-      : null
-  );
+  protected readonly priceRange = computed(() => {
+    const range = this.booksStore.priceRange();
+    return range ? { minPrice: range.min, maxPrice: range.max } : null;
+  });
 
-  protected readonly wishlistedIds = computed(
-    () => new Set(this.wishlist().map((book) => book.bookId))
-  );
+  protected readonly wishlistedIds = this.wishlist.ids;
 
   protected readonly visibleBooks = computed(() => {
     const category = this.category()?.toLocaleLowerCase();
@@ -93,29 +73,19 @@ export class HomeComponent implements OnDestroy {
   protected readonly firstLoad = computed(
     () =>
       this.books().length === 0 &&
-      (this.bookCallState() === LoadingState.LOADING ||
-        this.bookCallState() === LoadingState.INIT)
+      (this.booksStore.loading() || this.booksStore.callState() === "init")
   );
 
   constructor() {
-    this.store.dispatch(loadBooks());
-    this.store.dispatch(loadCategories());
-
-    // The search box shows the search text held in the store: keep it in step with the address.
-    effect(() =>
-      this.store.dispatch(setSearchItemValue({ searchItem: this.item() ?? "" }))
-    );
+    this.booksStore.load();
+    this.categoriesStore.load();
   }
 
   protected addToCart(bookId: number) {
-    this.store.dispatch(addToCart({ bookId }));
+    this.cart.add(bookId);
   }
 
   protected toggleWishlist({ bookId, isAdd }: WishlistToggle) {
-    this.store.dispatch(toggleWishlistItem({ bookId, isAdd }));
-  }
-
-  ngOnDestroy() {
-    this.store.dispatch(resetSearchItemValue());
+    this.wishlist.toggle({ bookId, isAdd });
   }
 }

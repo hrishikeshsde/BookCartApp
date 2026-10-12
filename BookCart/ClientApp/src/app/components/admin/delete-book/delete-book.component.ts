@@ -1,5 +1,10 @@
-import { AsyncPipe, CurrencyPipe } from "@angular/common";
-import { ChangeDetectionStrategy, Component, inject } from "@angular/core";
+import { CurrencyPipe } from "@angular/common";
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+} from "@angular/core";
 import { MatButton } from "@angular/material/button";
 import {
   MAT_DIALOG_DATA,
@@ -9,9 +14,7 @@ import {
   MatDialogRef,
   MatDialogTitle,
 } from "@angular/material/dialog";
-import { Store } from "@ngrx/store";
-import { deleteBook } from "src/app/state/actions/book.actions";
-import { selectBookById } from "src/app/state/selectors/book.selectors";
+import { BooksStore } from "src/app/state/books/books.store";
 
 @Component({
     selector: "app-delete-book",
@@ -24,22 +27,23 @@ import { selectBookById } from "src/app/state/selectors/book.selectors";
         MatDialogActions,
         MatButton,
         MatDialogClose,
-        AsyncPipe,
         CurrencyPipe,
     ]
 })
 export class DeleteBookComponent {
   private readonly dialogRef = inject(MatDialogRef<DeleteBookComponent>);
   private readonly bookid = inject<number>(MAT_DIALOG_DATA);
-  private readonly store = inject(Store);
+  private readonly booksStore = inject(BooksStore);
 
-  bookData$ = this.store.select(selectBookById(this.bookid));
+  protected readonly bookData = computed(
+    () => this.booksStore.entityMap()[this.bookid]
+  );
 
   onNoClick(): void {
     this.dialogRef.close();
   }
 
   confirmDelete(): void {
-    this.store.dispatch(deleteBook({ bookId: this.bookid }));
+    this.booksStore.remove(this.bookid);
   }
 }

@@ -1,10 +1,8 @@
-import type { Mock } from "vitest";
 import { provideHttpClient, withXhr } from "@angular/common/http";
 import { HttpTestingController, provideHttpClientTesting } from "@angular/common/http/testing";
 import { ComponentFixture, TestBed } from "@angular/core/testing";
 import { provideRouter } from "@angular/router";
-import { MockStore, provideMockStore } from "@ngrx/store/testing";
-import { register } from "src/app/state/actions/auth.actions";
+import { RegisterStore } from "src/app/state/register/register.store";
 import { UserRegistrationComponent } from "./user-registration.component";
 
 const valid = {
@@ -20,17 +18,17 @@ describe("UserRegistrationComponent", () => {
   let fixture: ComponentFixture<UserRegistrationComponent>;
   let component: UserRegistrationComponent;
   let http: HttpTestingController;
-  let dispatch: Mock;
+  const register = vi.fn();
 
   beforeEach(() => {
 
     vi.useFakeTimers();
     TestBed.configureTestingModule({
       imports: [UserRegistrationComponent],
-      providers: [provideRouter([]), provideMockStore(), provideHttpClient(withXhr()), provideHttpClientTesting()],
+      providers: [provideRouter([]), { provide: RegisterStore, useValue: { register } }, provideHttpClient(withXhr()), provideHttpClientTesting()],
     });
     http = TestBed.inject(HttpTestingController);
-    dispatch = vi.spyOn(TestBed.inject(MockStore), "dispatch");
+    register.mockClear();
     fixture = TestBed.createComponent(UserRegistrationComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
@@ -52,14 +50,14 @@ describe("UserRegistrationComponent", () => {
     fill({});
     expect(component.registrationForm.valid).toBe(true);
     component.registerUser();
-    expect(dispatch).toHaveBeenCalledWith(register({ userdetails: expect.objectContaining({ firstName: "Ada", password: "Abcdefg1" }) as never }));
+    expect(register).toHaveBeenCalledWith(expect.objectContaining({ firstName: "Ada", password: "Abcdefg1" }));
   });
 
   it("a taken user name blocks the form", () => {
     fill({}, false);
     expect(component.registrationForm.controls.userName.errors).toEqual({ userNameNotAvailable: true });
     component.registerUser();
-    expect(dispatch).not.toHaveBeenCalled();
+    expect(register).not.toHaveBeenCalled();
   });
 
   it("a weak password blocks the form", () => {

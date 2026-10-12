@@ -1,5 +1,11 @@
-import { AsyncPipe, CurrencyPipe } from "@angular/common";
-import { ChangeDetectionStrategy, Component, inject } from "@angular/core";
+import { CurrencyPipe } from "@angular/common";
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  OnInit,
+} from "@angular/core";
 import { MatButton } from "@angular/material/button";
 import {
   MatCard,
@@ -22,22 +28,11 @@ import {
 } from "@angular/material/table";
 import { MatTooltip } from "@angular/material/tooltip";
 import { RouterLink } from "@angular/router";
-import { Store } from "@ngrx/store";
-import { combineLatest, map } from "rxjs";
-import {
-  clearWishlist,
-  loadWishlist,
-  toggleWishlistItem,
-} from "src/app/state/actions/wishlist.actions";
-import { addToCart } from "src/app/state/actions/cart.actions";
 import { WishlistToggle } from "src/app/models/wishlist-toggle";
-import {
-  selectWishlistCallState,
-  selectWishlistItems,
-} from "src/app/state/selectors/wishlist.selectors";
+import { CartStore } from "src/app/state/cart/cart.store";
+import { WishlistStore } from "src/app/state/wishlist/wishlist.store";
 import { AddtocartComponent } from "../addtocart/addtocart.component";
 import { AddtowishlistComponent } from "../addtowishlist/addtowishlist.component";
-import { LoadingState } from "src/app/shared/call-state";
 
 @Component({
     selector: "app-wishlist",
@@ -65,38 +60,32 @@ import { LoadingState } from "src/app/shared/call-state";
         MatHeaderRow,
         MatRowDef,
         MatRow,
-        AsyncPipe,
         CurrencyPipe,
     ]
 })
-export class WishlistComponent {
-  private readonly store = inject(Store);
-  loadingState = LoadingState;
+export class WishlistComponent implements OnInit {
+  private readonly wishlist = inject(WishlistStore);
+  private readonly cart = inject(CartStore);
 
-  protected readonly wishlistItems$ = combineLatest([
-    this.store.select(selectWishlistItems),
-    this.store.select(selectWishlistCallState),
-  ]).pipe(
-    map(([items, callState]) => ({
-      items,
-      callState,
-    }))
-  );
+  protected readonly wishlistItems = computed(() => ({
+    items: this.wishlist.items(),
+    loading: this.wishlist.loading(),
+  }));
   displayedColumns: string[] = ["image", "title", "price", "cart", "wishlist"];
 
   ngOnInit(): void {
-    this.store.dispatch(loadWishlist());
+    this.wishlist.load();
   }
 
   clearWishlist() {
-    this.store.dispatch(clearWishlist());
+    this.wishlist.clear();
   }
 
   addToCart(bookId: number) {
-    this.store.dispatch(addToCart({ bookId }));
+    this.cart.add(bookId);
   }
 
   toggleWishlist({ bookId, isAdd }: WishlistToggle) {
-    this.store.dispatch(toggleWishlistItem({ bookId, isAdd }));
+    this.wishlist.toggle({ bookId, isAdd });
   }
 }

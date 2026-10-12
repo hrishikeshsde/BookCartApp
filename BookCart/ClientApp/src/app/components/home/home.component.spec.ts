@@ -1,22 +1,15 @@
+import { signal } from "@angular/core";
 import { ComponentFixture, TestBed } from "@angular/core/testing";
 import { By } from "@angular/platform-browser";
 import { provideRouter } from "@angular/router";
-import { MockStore, provideMockStore } from "@ngrx/store/testing";
-import { LoadingState } from "src/app/shared/call-state";
-import { loadBooks, resetSearchItemValue, setSearchItemValue } from "src/app/state/actions/book.actions";
-import { addToCart } from "src/app/state/actions/cart.actions";
-import { loadCategories } from "src/app/state/actions/categories.actions";
-import { toggleWishlistItem } from "src/app/state/actions/wishlist.actions";
-import { selectIsAuthenticated } from "src/app/state/selectors/auth.selectors";
-import {
-  selectBookCallState,
-  selectBooks,
-  selectMaxBookPrice,
-  selectMinBookPrice,
-} from "src/app/state/selectors/book.selectors";
-import { selectCategories } from "src/app/state/selectors/categories.selectors";
-import { selectWishlistItems } from "src/app/state/selectors/wishlist.selectors";
-import { aBook } from "src/app/testing/fixtures";
+import { AuthStore } from "src/app/state/auth/auth.store";
+import { BooksStore } from "src/app/state/books/books.store";
+import { CartStore } from "src/app/state/cart/cart.store";
+import { CategoriesStore } from "src/app/state/categories/categories.store";
+import { WishlistStore } from "src/app/state/wishlist/wishlist.store";
+import { fakeBooksStore } from "src/app/testing/fake-books-store";
+import { fakeAuthStore, fakeCartStore, fakeWishlistStore } from "src/app/testing/fake-stores";
+import { aBook, aUser } from "src/app/testing/fixtures";
 import { PriceFilterComponent } from "../price-filter/price-filter.component";
 import { HomeComponent } from "./home.component";
 
@@ -28,39 +21,38 @@ const books = [
 
 describe("HomeComponent", () => {
   let fixture: ComponentFixture<HomeComponent>;
-  let store: MockStore;
+  let booksStore: ReturnType<typeof fakeBooksStore>;
+  let auth: ReturnType<typeof fakeAuthStore>;
+  let cart: ReturnType<typeof fakeCartStore>;
+  let wishlist: ReturnType<typeof fakeWishlistStore>;
+  const categoriesStore = { categories: signal([{ categoryId: 1, categoryName: "Fiction" }]), load: vi.fn() };
   const root = () => fixture.nativeElement as HTMLElement;
   const titles = () =>
     Array.from(root().querySelectorAll("app-book-card .card-title strong")).map((e) => e.textContent?.trim());
 
   beforeEach(() => {
+    booksStore = fakeBooksStore(books);
+    auth = fakeAuthStore();
+    cart = fakeCartStore();
+    wishlist = fakeWishlistStore();
     TestBed.configureTestingModule({
       imports: [HomeComponent],
       providers: [
         provideRouter([]),
-        provideMockStore({
-          selectors: [
-            { selector: selectBooks, value: books },
-            { selector: selectBookCallState, value: LoadingState.LOADED },
-            { selector: selectMinBookPrice, value: 150 },
-            { selector: selectMaxBookPrice, value: 900 },
-            { selector: selectCategories, value: [{ categoryId: 1, categoryName: "Fiction" }] },
-            { selector: selectIsAuthenticated, value: false },
-            { selector: selectWishlistItems, value: [] },
-          ],
-        }),
+        { provide: AuthStore, useValue: auth },
+        { provide: CartStore, useValue: cart },
+        { provide: WishlistStore, useValue: wishlist },
+        { provide: CategoriesStore, useValue: categoriesStore },
+        { provide: BooksStore, useValue: booksStore },
       ],
     });
-    store = TestBed.inject(MockStore);
-    vi.spyOn(store, "dispatch");
+    categoriesStore.load.mockClear();
     fixture = TestBed.createComponent(HomeComponent);
     fixture.detectChanges();
   });
-  afterEach(() => store.resetSelectors());
-
   it("asks for the books and the categories when the page opens", () => {
-    expect(store.dispatch).toHaveBeenCalledWith(loadBooks());
-    expect(store.dispatch).toHaveBeenCalledWith(loadCategories());
+    expect(booksStore.load).toHaveBeenCalled();
+    expect(categoriesStore.load).toHaveBeenCalled();
   });
 
   it("shows every book when nothing filters", () => {
@@ -101,9 +93,8 @@ describe("HomeComponent", () => {
   });
 
   it("shows a spinner, not 'No books found', while the first load is under way", () => {
-    store.overrideSelector(selectBooks, []);
-    store.overrideSelector(selectBookCallState, LoadingState.LOADING);
-    store.refreshState();
+    booksStore.entities.set([]);
+    booksStore.callState.set("loading");
     fixture.detectChanges();
 
     expect(root().querySelector("mat-spinner")).not.toBeNull();
@@ -111,39 +102,27 @@ describe("HomeComponent", () => {
   });
 
   it("keeps the books on screen while they are being reloaded", () => {
-    store.overrideSelector(selectBookCallState, LoadingState.LOADING);
-    store.refreshState();
+    booksStore.callState.set("loading");
     fixture.detectChanges();
 
     expect(titles().length).toBe(3);
     expect(root().querySelector("mat-spinner")).toBeNull();
   });
 
-  it("holds the search text in the store for the search box, and forgets it on the way out", () => {
-    fixture.componentRef.setInput("item", "dune");
-    fixture.detectChanges();
-    expect(store.dispatch).toHaveBeenCalledWith(setSearchItemValue({ searchItem: "dune" }));
-
-    fixture.destroy();
-    expect(store.dispatch).toHaveBeenCalledWith(resetSearchItemValue());
-  });
-
   it("acts on what the cards report: the cart and, for a signed-in visitor, the wishlist", () => {
-    store.overrideSelector(selectIsAuthenticated, true);
-    store.refreshState();
+    auth.user.set(aUser());
     fixture.detectChanges();
 
     (root().querySelector("app-book-card app-addtocart button") as HTMLButtonElement).click();
     (root().querySelector("app-book-card .favourite-unselected") as HTMLElement).click();
 
-    expect(store.dispatch).toHaveBeenCalledWith(addToCart({ bookId: 1 }));
-    expect(store.dispatch).toHaveBeenCalledWith(toggleWishlistItem({ bookId: 1, isAdd: true }));
+    expect(cart.add).toHaveBeenCalledWith(1);
+    expect(wishlist.toggle).toHaveBeenCalledWith({ bookId: 1, isAdd: true });
   });
 
   it("ticks the heart of the books on the wishlist", () => {
-    store.overrideSelector(selectIsAuthenticated, true);
-    store.overrideSelector(selectWishlistItems, [books[1]]);
-    store.refreshState();
+    auth.user.set(aUser());
+    wishlist.items.set([books[1]]);
     fixture.detectChanges();
 
     const hearts = Array.from(root().querySelectorAll("app-book-card")).map((c) => c.querySelector(".favourite-selected") !== null);

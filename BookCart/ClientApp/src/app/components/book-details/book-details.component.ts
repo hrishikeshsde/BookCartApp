@@ -1,15 +1,13 @@
-import { AsyncPipe, CurrencyPipe } from "@angular/common";
+import { CurrencyPipe } from "@angular/common";
 import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  effect,
   inject,
   input,
   linkedSignal,
   signal,
 } from "@angular/core";
-import { toObservable } from "@angular/core/rxjs-interop";
 import { MatButton } from "@angular/material/button";
 import {
   MatCard,
@@ -20,25 +18,14 @@ import {
 } from "@angular/material/card";
 import { MatProgressSpinner } from "@angular/material/progress-spinner";
 import { RouterLink } from "@angular/router";
-import { Store } from "@ngrx/store";
-import { combineLatest, finalize, map, switchMap } from "rxjs";
+import { finalize } from "rxjs";
 import { WishlistToggle } from "src/app/models/wishlist-toggle";
 import { BookService } from "src/app/services/book.service";
-import { getCallStateError, LoadingState } from "src/app/shared/call-state";
-import { loadBooks } from "src/app/state/actions/book.actions";
-import { addToCart } from "src/app/state/actions/cart.actions";
-import { loadSimilarBooks } from "src/app/state/actions/similar-books.actions";
-import { toggleWishlistItem } from "src/app/state/actions/wishlist.actions";
-import { selectIsAuthenticated } from "src/app/state/selectors/auth.selectors";
-import {
-  selectBookById,
-  selectBookCallState,
-} from "src/app/state/selectors/book.selectors";
-import {
-  selectSimilarBooks,
-  selectSimilarBooksCallState,
-} from "src/app/state/selectors/similar-books.selectors";
-import { selectWishlistItems } from "src/app/state/selectors/wishlist.selectors";
+import { BooksStore } from "src/app/state/books/books.store";
+import { AuthStore } from "src/app/state/auth/auth.store";
+import { CartStore } from "src/app/state/cart/cart.store";
+import { SimilarBooksStore } from "src/app/state/similar-books/similar-books.store";
+import { WishlistStore } from "src/app/state/wishlist/wishlist.store";
 import { AddtocartComponent } from "../addtocart/addtocart.component";
 import { AddtowishlistComponent } from "../addtowishlist/addtowishlist.component";
 import { BookSummaryComponent } from "../book-summary/book-summary.component";
@@ -66,49 +53,33 @@ import { SimilarbooksComponent } from "../similarbooks/similarbooks.component";
     SimilarbooksComponent,
     MatButton,
     RouterLink,
-    AsyncPipe,
     CurrencyPipe,
   ],
 })
 export class BookDetailsComponent {
-  private readonly store = inject(Store);
+  private readonly cart = inject(CartStore);
+  private readonly wishlist = inject(WishlistStore);
   private readonly bookService = inject(BookService);
-  LoadingState = LoadingState;
+  private readonly booksStore = inject(BooksStore);
 
   /** The :id in /books/details/:id. */
   readonly id = input.required<string>();
   private readonly bookId = computed(() => Number(this.id()));
 
-  bookDetails$ = combineLatest([
-    toObservable(this.bookId).pipe(
-      switchMap((bookId) => this.store.select(selectBookById(bookId)))
-    ),
-    this.store.select(selectIsAuthenticated),
-    this.store.select(selectBookCallState),
-  ]).pipe(
-    map(([book, isAuthenticated, callState]) => {
-      return {
-        book,
-        isAuthenticated,
-        callState,
-        isLoading: callState === LoadingState.LOADING,
-        hasError: getCallStateError(callState) !== null,
-      };
-    })
-  );
+  private readonly signedIn = inject(AuthStore).isAuthenticated;
 
-  protected readonly similarBooks = this.store.selectSignal(selectSimilarBooks);
-  private readonly similarCallState = this.store.selectSignal(
-    selectSimilarBooksCallState
-  );
-  protected readonly similarLoading = computed(
-    () => this.similarCallState() === LoadingState.LOADING
-  );
+  protected readonly bookDetails = computed(() => ({
+    book: this.booksStore.entityMap()[this.bookId()],
+    isAuthenticated: this.signedIn(),
+    isLoading: this.booksStore.loading(),
+    hasError: this.booksStore.error() !== null,
+  }));
 
-  private readonly wishlist = this.store.selectSignal(selectWishlistItems);
-  protected readonly wishlistedIds = computed(
-    () => new Set(this.wishlist().map((book) => book.bookId))
-  );
+  private readonly similarBooksStore = inject(SimilarBooksStore);
+  protected readonly similarBooks = this.similarBooksStore.books;
+  protected readonly similarLoading = this.similarBooksStore.loading;
+
+  protected readonly wishlistedIds = this.wishlist.ids;
 
   // The summary starts empty again whenever the page shows another book.
   protected readonly summary = linkedSignal<number, string>({
@@ -122,19 +93,17 @@ export class BookDetailsComponent {
   protected readonly summaryLoading = signal(false);
 
   constructor() {
-    this.store.dispatch(loadBooks());
+    this.booksStore.load();
     // Whenever the page shows another book, fetch the books similar to it.
-    effect(() =>
-      this.store.dispatch(loadSimilarBooks({ bookId: this.bookId() }))
-    );
+    this.similarBooksStore.load(this.bookId);
   }
 
   protected addToCart(bookId: number) {
-    this.store.dispatch(addToCart({ bookId }));
+    this.cart.add(bookId);
   }
 
   protected toggleWishlist({ bookId, isAdd }: WishlistToggle) {
-    this.store.dispatch(toggleWishlistItem({ bookId, isAdd }));
+    this.wishlist.toggle({ bookId, isAdd });
   }
 
   /** Asks the server for an AI-written summary of this book (the AI key never reaches the browser). */

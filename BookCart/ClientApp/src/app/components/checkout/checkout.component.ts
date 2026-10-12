@@ -5,6 +5,7 @@ import {
   computed,
   effect,
   inject,
+  signal,
 } from "@angular/core";
 import {
   FormGroup,
@@ -23,15 +24,12 @@ import {
 import { MatError, MatFormField, MatLabel } from "@angular/material/form-field";
 import { MatInput } from "@angular/material/input";
 import { MatProgressSpinner } from "@angular/material/progress-spinner";
-import { RouterLink } from "@angular/router";
-import { Store } from "@ngrx/store";
+import { Router, RouterLink } from "@angular/router";
+import { finalize } from "rxjs";
 import { CheckOutForm } from "src/app/models/checkoutForm";
-import { LoadingState } from "src/app/shared/call-state";
-import { placeOrder } from "src/app/state/actions/checkout.actions";
-import {
-  selectCartCallState,
-  selectCartItems,
-} from "src/app/state/selectors/cart.selectors";
+import { CheckoutService } from "src/app/services/checkout.service";
+import { SnackbarService } from "src/app/services/snackbar.service";
+import { CartStore } from "src/app/state/cart/cart.store";
 
 @Component({
   selector: "app-checkout",
@@ -57,8 +55,13 @@ import {
 })
 export class CheckoutComponent {
   private readonly fb = inject(NonNullableFormBuilder);
-  private readonly store = inject(Store);
-  protected readonly loadingState = LoadingState;
+  private readonly cart = inject(CartStore);
+  private readonly checkoutService = inject(CheckoutService);
+  private readonly snackbar = inject(SnackbarService);
+  private readonly router = inject(Router);
+
+  /** True while the order is being placed, so a double click cannot send it twice. */
+  protected readonly placing = signal(false);
 
   checkOutForm: FormGroup<CheckOutForm> = this.fb.group({
     name: ["", Validators.required],
@@ -75,36 +78,50 @@ export class CheckoutComponent {
     return this.checkOutForm.controls;
   }
 
-  private readonly items = this.store.selectSignal(selectCartItems);
-  private readonly callState = this.store.selectSignal(selectCartCallState);
+  private readonly items = this.cart.items;
 
   protected readonly checkOutItems = computed(() => ({
     items: this.items(),
-    callState: this.callState(),
+    /** The cart has not answered yet (the first load, or a reload). */
+    pending: this.cart.loading() || this.cart.callState() === "init",
+    loaded: this.cart.loaded(),
   }));
 
-  readonly totalPrice = computed(() =>
-    this.items().reduce(
-      (total, item) => total + item.book.price * item.quantity,
-      0
-    )
-  );
+  readonly totalPrice = this.cart.total;
 
   constructor() {
     // Nothing to order (the cart came back empty): there is nothing to fill in either.
     effect(() => {
-      if (
-        this.items().length === 0 &&
-        this.callState() === LoadingState.LOADED
-      ) {
+      if (this.items().length === 0 && this.cart.loaded()) {
         this.checkOutForm.disable();
       }
     });
   }
 
+  /**
+   * Nothing about the order is sent: the server orders what is in its copy of the cart, at its prices. Either way the
+   * server's cart is what to show afterwards (it is empty after an order).
+   */
   placeOrder() {
-    if (this.checkOutForm.valid) {
-      this.store.dispatch(placeOrder());
+    if (!this.checkOutForm.valid || this.placing()) {
+      return;
     }
+    this.placing.set(true);
+    this.checkoutService
+      .placeOrder()
+      .pipe(finalize(() => this.placing.set(false)))
+      .subscribe({
+        next: () => {
+          this.snackbar.showSnackBar("Order placed successfully!!!");
+          this.router.navigate(["/myorders"]);
+          this.cart.load();
+        },
+        error: () => {
+          this.snackbar.showSnackBar(
+            "The order could not be placed. Your cart may be empty or have changed: please review it and try again."
+          );
+          this.cart.load();
+        },
+      });
   }
 }

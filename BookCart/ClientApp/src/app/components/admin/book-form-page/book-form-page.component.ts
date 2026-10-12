@@ -1,21 +1,13 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   inject,
   input,
 } from "@angular/core";
-import { toObservable, toSignal } from "@angular/core/rxjs-interop";
-import { Store } from "@ngrx/store";
-import { of, switchMap } from "rxjs";
-import {
-  addBook,
-  cancelBookFormNavigation,
-  loadBooks,
-  updateBook,
-} from "src/app/state/actions/book.actions";
-import { loadCategories } from "src/app/state/actions/categories.actions";
-import { selectBookById } from "src/app/state/selectors/book.selectors";
-import { selectCategories } from "src/app/state/selectors/categories.selectors";
+import { Router } from "@angular/router";
+import { BooksStore } from "src/app/state/books/books.store";
+import { CategoriesStore } from "src/app/state/categories/categories.store";
 import {
   BookFormComponent,
   BookFormSubmit,
@@ -34,34 +26,35 @@ import {
   imports: [BookFormComponent],
 })
 export class BookFormPageComponent {
-  private readonly store = inject(Store);
+  private readonly booksStore = inject(BooksStore);
+  private readonly categoriesStore = inject(CategoriesStore);
+  private readonly router = inject(Router);
 
   /** The :id in /admin/books/:id (there is none for /admin/books/new). */
   readonly id = input<string>();
 
-  protected readonly book = toSignal(
-    toObservable(this.id).pipe(
-      switchMap((id) =>
-        id ? this.store.select(selectBookById(Number(id))) : of(undefined)
-      )
-    )
-  );
-  protected readonly categories = this.store.selectSignal(selectCategories);
+  protected readonly book = computed(() => {
+    const id = this.id();
+    return id ? this.booksStore.entityMap()[Number(id)] : undefined;
+  });
+  protected readonly categories = this.categoriesStore.categories;
 
   constructor() {
     // Opened by its address (a refresh), the page has no books yet: without them an edit page would show a blank
     // "Add" form, and saving that would create a second copy of the book.
-    this.store.dispatch(loadBooks());
-    this.store.dispatch(loadCategories());
+    this.booksStore.load();
+    this.categoriesStore.load();
   }
 
   protected save({ formData, isUpdate }: BookFormSubmit) {
-    this.store.dispatch(
-      isUpdate ? updateBook({ book: formData }) : addBook({ book: formData })
-    );
+    if (isUpdate) {
+      this.booksStore.update(formData);
+    } else {
+      this.booksStore.add(formData);
+    }
   }
 
   protected cancel() {
-    this.store.dispatch(cancelBookFormNavigation());
+    this.router.navigate(["/admin/books"]);
   }
 }

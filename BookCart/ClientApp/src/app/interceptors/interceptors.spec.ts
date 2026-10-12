@@ -1,12 +1,9 @@
-import type { Mock } from "vitest";
 import { HttpClient, HttpErrorResponse, provideHttpClient, withInterceptors, withXhr } from "@angular/common/http";
 import { HttpTestingController, provideHttpClientTesting } from "@angular/common/http/testing";
 import { TestBed } from "@angular/core/testing";
-import { MockStore, provideMockStore } from "@ngrx/store/testing";
 import { SnackbarService } from "../services/snackbar.service";
 import { TokenStorage } from "../services/token-storage.service";
-import { sessionExpired } from "../state/actions/auth.actions";
-import { selectIsAuthenticated } from "../state/selectors/auth.selectors";
+import { AuthStore } from "../state/auth/auth.store";
 import { anHourAgo, aToken, inOneHour } from "../testing/fixtures";
 import { SnackbarStub } from "../testing/helpers";
 import { errorInterceptor } from "./error-interceptor.service";
@@ -54,9 +51,8 @@ describe("authTokenInterceptor", () => {
 describe("errorInterceptor", () => {
   let http: HttpTestingController;
   let client: HttpClient;
-  let store: MockStore;
-  let dispatch: Mock;
   let snackbar: SnackbarStub;
+  const expireSession = vi.fn();
 
   beforeEach(() => {
     snackbar = new SnackbarStub();
@@ -64,19 +60,15 @@ describe("errorInterceptor", () => {
       providers: [
         provideHttpClient(withXhr(), withInterceptors([errorInterceptor])),
         provideHttpClientTesting(),
-        provideMockStore({ selectors: [{ selector: selectIsAuthenticated, value: true }] }),
+        { provide: AuthStore, useValue: { expireSession } },
         { provide: SnackbarService, useValue: snackbar },
       ],
     });
+    expireSession.mockClear();
     http = TestBed.inject(HttpTestingController);
     client = TestBed.inject(HttpClient);
-    store = TestBed.inject(MockStore);
-    dispatch = vi.spyOn(store, "dispatch");
   });
-  afterEach(() => {
-    http.verify();
-    store.resetSelectors(); // an override is global: it would leak into every later spec
-  });
+  afterEach(() => http.verify());
 
   function failWith(url: string, status: number) {
     let caught: unknown;
@@ -85,23 +77,14 @@ describe("errorInterceptor", () => {
     return caught;
   }
 
-  it("a 401 ends the session (without reloading the page) and says there was one", () => {
+  it("a 401 ends the session (the store clears the token and goes to login; the page is not reloaded)", () => {
     failWith("/api/wishlist", 401);
-    expect(dispatch).toHaveBeenCalledTimes(1);
-    expect(dispatch).toHaveBeenCalledWith(sessionExpired({ hadSession: true }));
-  });
-
-  it("a 401 for a guest says there was no session", () => {
-    store.overrideSelector(selectIsAuthenticated, false);
-    store.refreshState();
-    failWith("/api/wishlist", 401);
-    expect(dispatch).toHaveBeenCalledTimes(1);
-    expect(dispatch).toHaveBeenCalledWith(sessionExpired({ hadSession: false }));
+    expect(expireSession).toHaveBeenCalledTimes(1);
   });
 
   it("a 401 from the login call is a wrong password, not an expired session", () => {
     failWith("/api/login", 401);
-    expect(dispatch).not.toHaveBeenCalled();
+    expect(expireSession).not.toHaveBeenCalled();
   });
 
   it("a 403 and a server error each get one message", () => {
@@ -115,7 +98,7 @@ describe("errorInterceptor", () => {
 
   it("a 404 is left to the caller (no redirect, no message)", () => {
     failWith("/api/book/9", 404);
-    expect(dispatch).not.toHaveBeenCalled();
+    expect(expireSession).not.toHaveBeenCalled();
     expect(snackbar.messages).toEqual([]);
   });
 

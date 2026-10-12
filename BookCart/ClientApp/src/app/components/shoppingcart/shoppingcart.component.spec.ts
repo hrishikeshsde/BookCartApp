@@ -1,42 +1,28 @@
-import type { Mock } from "vitest";
 import { ComponentFixture, TestBed } from "@angular/core/testing";
 import { provideRouter } from "@angular/router";
-import { MockStore, provideMockStore } from "@ngrx/store/testing";
-import { LoadingState } from "src/app/shared/call-state";
-import { addToCart, clearCart, loadCart, reduceCartQuantity, removeCartItem, } from "src/app/state/actions/cart.actions";
-import { selectCartCallState, selectCartItems } from "src/app/state/selectors/cart.selectors";
+import { CartStore } from "src/app/state/cart/cart.store";
+import { fakeCartStore } from "src/app/testing/fake-stores";
 import { aCartItem } from "src/app/testing/fixtures";
 import { ShoppingcartComponent } from "./shoppingcart.component";
 
 describe("ShoppingcartComponent", () => {
   let fixture: ComponentFixture<ShoppingcartComponent>;
-  let store: MockStore;
-  let dispatch: Mock;
+  let cart: ReturnType<typeof fakeCartStore>;
   const root = () => fixture.nativeElement as HTMLElement;
   const buttonWithIcon = (icon: string) => Array.from(root().querySelectorAll("button")).find((b) => b.textContent?.trim() === icon) as HTMLButtonElement;
 
   beforeEach(() => {
+    cart = fakeCartStore([aCartItem(1, 2), aCartItem(2, 1)]);
     TestBed.configureTestingModule({
       imports: [ShoppingcartComponent],
-      providers: [
-        provideRouter([]),
-        provideMockStore({
-          selectors: [
-            { selector: selectCartItems, value: [aCartItem(1, 2), aCartItem(2, 1)] },
-            { selector: selectCartCallState, value: LoadingState.LOADED },
-          ],
-        }),
-      ],
+      providers: [provideRouter([]), { provide: CartStore, useValue: cart }],
     });
-    store = TestBed.inject(MockStore);
-    dispatch = vi.spyOn(store, "dispatch");
     fixture = TestBed.createComponent(ShoppingcartComponent);
     fixture.detectChanges();
   });
-  afterEach(() => store.resetSelectors());
 
   it("asks the store for the cart when the page opens", () => {
-    expect(dispatch).toHaveBeenCalledWith(loadCart());
+    expect(cart.load).toHaveBeenCalledTimes(1);
   });
 
   it("lists every book with the grand total", () => {
@@ -48,24 +34,31 @@ describe("ShoppingcartComponent", () => {
 
   it("its three buttons add one, remove one and remove the book", () => {
     buttonWithIcon("add_circle").click();
-    expect(dispatch).toHaveBeenCalledWith(addToCart({ bookId: 1 }));
+    expect(cart.add).toHaveBeenCalledWith(1);
     buttonWithIcon("remove_circle").click();
-    expect(dispatch).toHaveBeenCalledWith(reduceCartQuantity({ bookId: 1 }));
+    expect(cart.reduce).toHaveBeenCalledWith(1);
     buttonWithIcon("delete").click();
-    expect(dispatch).toHaveBeenCalledWith(removeCartItem({ bookId: 1 }));
+    expect(cart.remove).toHaveBeenCalledWith(1);
   });
 
   it("clear cart empties it", () => {
     const clear = Array.from(root().querySelectorAll("button")).find((b) => b.textContent?.includes("Clear cart")) as HTMLButtonElement;
     clear.click();
-    expect(dispatch).toHaveBeenCalledWith(clearCart());
+    expect(cart.clear).toHaveBeenCalled();
   });
 
   it("says so when the cart is empty, and offers no clear button", () => {
-    store.overrideSelector(selectCartItems, []);
-    store.refreshState();
+    cart.items.set([]);
     fixture.detectChanges();
     expect(root().textContent).toContain("Your shopping cart is empty.");
     expect(root().textContent).not.toContain("Clear cart");
+  });
+
+  it("shows a spinner, not 'empty', while the cart is loading", () => {
+    cart.items.set([]);
+    cart.callState.set("loading");
+    fixture.detectChanges();
+    expect(root().querySelector("mat-spinner")).not.toBeNull();
+    expect(root().textContent).not.toContain("Your shopping cart is empty.");
   });
 });

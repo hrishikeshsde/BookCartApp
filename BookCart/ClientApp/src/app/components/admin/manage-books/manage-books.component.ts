@@ -35,9 +35,7 @@ import {
   MatTableDataSource,
 } from "@angular/material/table";
 import { RouterLink } from "@angular/router";
-import { Store } from "@ngrx/store";
-import { loadBooks } from "src/app/state/actions/book.actions";
-import { selectBooks } from "src/app/state/selectors/book.selectors";
+import { BooksStore } from "src/app/state/books/books.store";
 import { DeleteBookComponent } from "../delete-book/delete-book.component";
 
 @Component({
@@ -76,13 +74,13 @@ import { DeleteBookComponent } from "../delete-book/delete-book.component";
 })
 export class ManageBooksComponent {
   private readonly dialog = inject(MatDialog);
-  private readonly store = inject(Store);
+  private readonly booksStore = inject(BooksStore);
 
   private readonly paginator = viewChild(MatPaginator);
   private readonly sort = viewChild(MatSort);
 
   protected readonly searchValue = signal("");
-  private readonly books = this.store.selectSignal(selectBooks);
+  private readonly books = this.booksStore.entities;
 
   // Rebuilt when the books, the search text or (once the table is on screen) the paginator and sorter change.
   protected readonly bookTableData = computed(() => {
@@ -107,7 +105,7 @@ export class ManageBooksComponent {
   ];
 
   constructor() {
-    this.store.dispatch(loadBooks());
+    this.booksStore.load();
   }
 
   applyFilter(event: Event) {

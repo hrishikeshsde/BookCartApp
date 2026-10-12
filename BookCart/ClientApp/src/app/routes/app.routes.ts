@@ -1,25 +1,7 @@
 import { Routes } from "@angular/router";
-import { provideEffects } from "@ngrx/effects";
-import { provideState } from "@ngrx/store";
 import { HomeComponent } from "../components/home/home.component";
 import { adminGuard } from "../guards/admin-auth.guard";
 import { authGuard } from "../guards/auth.guard";
-import { RegisterEffects } from "../state/effects/register.effects";
-import { SimilarBooksEffects } from "../state/effects/similar-books.effects";
-import {
-  REGISTER_FEATURE_KEY,
-  registerReducer,
-} from "../state/reducers/register.reducer";
-import {
-  SIMILAR_BOOKS_FEATURE_KEY,
-  similarBooksReducer,
-} from "../state/reducers/similar-books.reducers";
-import { OrderEffects } from "../state/effects/order.effects";
-import {
-  ORDER_FEATURE_KEY,
-  orderReducer,
-} from "../state/reducers/order.reducers";
-import { CheckoutEffects } from "../state/effects/checkout.effects";
 
 export const APP_ROUTES: Routes = [
   { path: "", component: HomeComponent, pathMatch: "full", title: "Home" },
@@ -35,10 +17,6 @@ export const APP_ROUTES: Routes = [
   },
   {
     path: "register",
-    providers: [
-      provideEffects([RegisterEffects]),
-      provideState(REGISTER_FEATURE_KEY, registerReducer),
-    ],
     loadComponent: () =>
       import(
         "../components/user-registration/user-registration.component"
@@ -47,10 +25,6 @@ export const APP_ROUTES: Routes = [
   },
   {
     path: "books/details/:id",
-    providers: [
-      provideEffects([SimilarBooksEffects]),
-      provideState(SIMILAR_BOOKS_FEATURE_KEY, similarBooksReducer),
-    ],
     loadComponent: () =>
       import("../components/book-details/book-details.component").then(
         (c) => c.BookDetailsComponent
@@ -68,7 +42,6 @@ export const APP_ROUTES: Routes = [
   },
   {
     path: "checkout",
-    providers: [provideEffects([CheckoutEffects])],
     loadComponent: () =>
       import("../components/checkout/checkout.component").then(
         (c) => c.CheckoutComponent
@@ -78,10 +51,6 @@ export const APP_ROUTES: Routes = [
   },
   {
     path: "myorders",
-    providers: [
-      provideEffects([OrderEffects]),
-      provideState(ORDER_FEATURE_KEY, orderReducer),
-    ],
     loadComponent: () =>
       import("../components/my-orders/my-orders.component").then(
         (c) => c.MyOrdersComponent

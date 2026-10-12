@@ -1,8 +1,9 @@
-import { AsyncPipe, CurrencyPipe } from "@angular/common";
+import { CurrencyPipe } from "@angular/common";
 import {
   ChangeDetectionStrategy,
   Component,
   OnInit,
+  computed,
   inject,
 } from "@angular/core";
 import { MatButton, MatIconButton } from "@angular/material/button";
@@ -28,20 +29,7 @@ import {
 } from "@angular/material/table";
 import { MatTooltip } from "@angular/material/tooltip";
 import { RouterLink } from "@angular/router";
-import { Store } from "@ngrx/store";
-import { combineLatest, map } from "rxjs";
-import { LoadingState } from "src/app/shared/call-state";
-import {
-  addToCart,
-  clearCart,
-  loadCart,
-  reduceCartQuantity,
-  removeCartItem,
-} from "src/app/state/actions/cart.actions";
-import {
-  selectCartCallState,
-  selectCartItems,
-} from "src/app/state/selectors/cart.selectors";
+import { CartStore } from "src/app/state/cart/cart.store";
 
 @Component({
     selector: "app-shoppingcart",
@@ -70,25 +58,16 @@ import {
         MatRowDef,
         MatRow,
         CurrencyPipe,
-        AsyncPipe,
     ]
 })
 export class ShoppingcartComponent implements OnInit {
-  private readonly store = inject(Store);
-  protected readonly loadingState = LoadingState;
+  private readonly cart = inject(CartStore);
 
-  protected readonly cartItems$ = combineLatest([
-    this.store.select(selectCartItems),
-    this.store.select(selectCartCallState),
-  ]).pipe(
-    map(([items, callState]) => {
-      const total = items.reduce(
-        (total, item) => total + item.book.price * item.quantity,
-        0
-      );
-      return { items, total, callState };
-    })
-  );
+  protected readonly cartItems = computed(() => ({
+    items: this.cart.items(),
+    total: this.cart.total(),
+    loading: this.cart.loading(),
+  }));
 
   displayedColumns: string[] = [
     "image",
@@ -100,22 +79,22 @@ export class ShoppingcartComponent implements OnInit {
   ];
 
   ngOnInit() {
-    this.store.dispatch(loadCart());
+    this.cart.load();
   }
 
   deleteCartItem(bookId: number) {
-    this.store.dispatch(removeCartItem({ bookId }));
+    this.cart.remove(bookId);
   }
 
   addBookToCart(bookId: number) {
-    this.store.dispatch(addToCart({ bookId }));
+    this.cart.add(bookId);
   }
 
   deleteOneCartItem(bookId: number) {
-    this.store.dispatch(reduceCartQuantity({ bookId }));
+    this.cart.reduce(bookId);
   }
 
   clearCart() {
-    this.store.dispatch(clearCart());
+    this.cart.clear();
   }
 }

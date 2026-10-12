@@ -1,4 +1,4 @@
-@if (cartItems$ | async; as cartItems) {
+@if (cartItems(); as cartItems) {
 <mat-card class="my-4">
   <mat-card-header
     class="mat-elevation-z2 custom-card-header justify-content-between"
@@ -111,7 +111,7 @@
       </td>
     </ng-container>
   </mat-card-content>
-  } @else { @if (cartItems.callState === loadingState.LOADING) {
+  } @else { @if (cartItems.loading) {
   <div class="d-flex justify-content-center">
     <mat-spinner></mat-spinner>
   </div>

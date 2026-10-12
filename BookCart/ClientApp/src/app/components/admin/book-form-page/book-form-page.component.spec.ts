@@ -1,27 +1,33 @@
 import { ComponentFixture, TestBed } from "@angular/core/testing";
-import { provideStore, Store } from "@ngrx/store";
-import { addBook, cancelBookFormNavigation, loadBooks, loadBooksSuccess, updateBook } from "src/app/state/actions/book.actions";
-import { loadCategories, loadCategoriesSuccess } from "src/app/state/actions/categories.actions";
-import { BOOK_FEATURE_KEY, bookReducer } from "src/app/state/reducers/book.reducers";
-import { CATEGORIES_FEATURE_KEY, categoryReducer } from "src/app/state/reducers/categories.reducers";
+import { provideRouter, Router } from "@angular/router";
+import { of } from "rxjs";
+import { BookService } from "src/app/services/book.service";
+import { BooksStore } from "src/app/state/books/books.store";
+import { fakeBooksStore } from "src/app/testing/fake-books-store";
 import { aBook } from "src/app/testing/fixtures";
 import { BookFormComponent } from "../book-form/book-form.component";
 import { BookFormPageComponent } from "./book-form-page.component";
 
 describe("BookFormPageComponent", () => {
   let fixture: ComponentFixture<BookFormPageComponent>;
-  let store: Store;
-  let dispatch: ReturnType<typeof vi.spyOn>;
+  let booksStore: ReturnType<typeof fakeBooksStore>;
+  let navigate: ReturnType<typeof vi.spyOn>;
+  const getCategories = vi.fn(() => of([{ categoryId: 1, categoryName: "Fiction" }]));
   const form = () => fixture.debugElement.children[0].componentInstance as BookFormComponent;
   const root = () => fixture.nativeElement as HTMLElement;
 
   beforeEach(() => {
+    booksStore = fakeBooksStore([], "init");
     TestBed.configureTestingModule({
       imports: [BookFormPageComponent],
-      providers: [provideStore({ [BOOK_FEATURE_KEY]: bookReducer, [CATEGORIES_FEATURE_KEY]: categoryReducer })],
+      providers: [
+        provideRouter([]),
+        { provide: BooksStore, useValue: booksStore },
+        { provide: BookService, useValue: { getCategories } },
+      ],
     });
-    store = TestBed.inject(Store);
-    dispatch = vi.spyOn(store, "dispatch");
+    navigate = vi.spyOn(TestBed.inject(Router), "navigate").mockResolvedValue(true);
+    getCategories.mockClear();
   });
 
   const open = (id?: string) => {
@@ -34,15 +40,15 @@ describe("BookFormPageComponent", () => {
 
   it("loads the books and the categories itself, so a page opened by its address (a refresh) has them", () => {
     open("5");
-    expect(dispatch).toHaveBeenCalledWith(loadBooks());
-    expect(dispatch).toHaveBeenCalledWith(loadCategories());
+    expect(booksStore.load).toHaveBeenCalled();
+    expect(getCategories).toHaveBeenCalledTimes(1);
   });
 
   it("gives the form the book the address names once the books have arrived", async () => {
     open("5");
     expect(root().querySelector("mat-card-title")?.textContent).toContain("Add Book");
 
-    store.dispatch(loadBooksSuccess({ books: [aBook(4), aBook(5, { title: "Emma" })] }));
+    booksStore.entities.set([aBook(4), aBook(5, { title: "Emma" })]);
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
@@ -53,7 +59,6 @@ describe("BookFormPageComponent", () => {
 
   it("gives the form the categories", () => {
     open();
-    store.dispatch(loadCategoriesSuccess({ genres: [{ categoryId: 1, categoryName: "Fiction" }] }));
     fixture.detectChanges();
     expect(form().categories()).toEqual([{ categoryId: 1, categoryName: "Fiction" }]);
   });
@@ -62,19 +67,21 @@ describe("BookFormPageComponent", () => {
     open();
     const formData = new FormData();
     form().save.emit({ formData, isUpdate: false });
-    expect(dispatch).toHaveBeenCalledWith(addBook({ book: formData }));
+    expect(booksStore.add).toHaveBeenCalledWith(formData);
+    expect(booksStore.update).not.toHaveBeenCalled();
   });
 
   it("files an edit as an update", () => {
     open("5");
     const formData = new FormData();
     form().save.emit({ formData, isUpdate: true });
-    expect(dispatch).toHaveBeenCalledWith(updateBook({ book: formData }));
+    expect(booksStore.update).toHaveBeenCalledWith(formData);
+    expect(booksStore.add).not.toHaveBeenCalled();
   });
 
-  it("leaves the form when it is cancelled", () => {
+  it("goes back to the admin books when it is cancelled", () => {
     open();
     form().cancel.emit();
-    expect(dispatch).toHaveBeenCalledWith(cancelBookFormNavigation());
+    expect(navigate).toHaveBeenCalledWith(["/admin/books"]);
   });
 });

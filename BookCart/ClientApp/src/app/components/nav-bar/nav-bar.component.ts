@@ -1,7 +1,7 @@
-import { AsyncPipe } from "@angular/common";
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   inject,
   isDevMode,
 } from "@angular/core";
@@ -11,21 +11,18 @@ import { MatIcon } from "@angular/material/icon";
 import { MatMenu, MatMenuItem, MatMenuTrigger } from "@angular/material/menu";
 import { MatToolbar, MatToolbarRow } from "@angular/material/toolbar";
 import { MatTooltip } from "@angular/material/tooltip";
-import { RouterLink, RouterLinkActive } from "@angular/router";
-import { Router } from "@angular/router";
-import { Store } from "@ngrx/store";
+import { toSignal } from "@angular/core/rxjs-interop";
 import {
-  selectBooks,
-  selectSearchItemValue,
-} from "src/app/state/selectors/book.selectors";
-import { combineLatest, map } from "rxjs";
-import { logout } from "src/app/state/actions/auth.actions";
-import {
-  selectAuthenticatedUser,
-  selectIsAuthenticated,
-} from "src/app/state/selectors/auth.selectors";
-import { selectCarttemsCount } from "src/app/state/selectors/cart.selectors";
-import { selectWishlistItemsCount } from "src/app/state/selectors/wishlist.selectors";
+  NavigationEnd,
+  Router,
+  RouterLink,
+  RouterLinkActive,
+} from "@angular/router";
+import { filter, map, startWith } from "rxjs";
+import { AuthStore } from "src/app/state/auth/auth.store";
+import { BooksStore } from "src/app/state/books/books.store";
+import { CartStore } from "src/app/state/cart/cart.store";
+import { WishlistStore } from "src/app/state/wishlist/wishlist.store";
 import { SearchComponent } from "../search/search.component";
 
 @Component({
@@ -48,34 +45,42 @@ import { SearchComponent } from "../search/search.component";
         MatMenuTrigger,
         MatMenu,
         MatMenuItem,
-        AsyncPipe,
     ]
 })
 export class NavBarComponent {
-  private readonly store = inject(Store);
+  private readonly auth = inject(AuthStore);
+  private readonly cart = inject(CartStore);
+  private readonly wishlist = inject(WishlistStore);
   private readonly router = inject(Router);
+  private readonly booksStore = inject(BooksStore);
 
   /** The backend serves its API reference (/scalar) in Development only, so only dev builds link to it. */
   protected readonly showApiDocs = isDevMode();
 
-  userState$ = combineLatest([
-    this.store.select(selectIsAuthenticated),
-    this.store.select(selectAuthenticatedUser),
-    this.store.select(selectWishlistItemsCount),
-    this.store.select(selectCarttemsCount),
-  ]).pipe(
-    map(([isAuthenticated, user, wishlistItemcount, cartItemCount]) => {
-      return {
-        isAuthenticated,
-        user,
-        wishlistItemcount,
-        cartItemCount,
-      };
-    })
+  protected readonly userState = computed(() => ({
+    isAuthenticated: this.auth.isAuthenticated(),
+    user: this.auth.user(),
+    wishlistItemcount: this.wishlist.count(),
+    cartItemCount: this.cart.count(),
+  }));
+
+  protected readonly books = this.booksStore.entities;
+  /** What the search results page is searching for (the ?item= of /search), or nothing on any other page. */
+  protected readonly searchText = toSignal(
+    this.router.events.pipe(
+      filter((event) => event instanceof NavigationEnd),
+      startWith(null),
+      map(() => this.searchTextOf(this.router.url))
+    ),
+    { initialValue: this.searchTextOf(this.router.url) }
   );
 
-  protected readonly books = this.store.selectSignal(selectBooks);
-  protected readonly searchText = this.store.selectSignal(selectSearchItemValue);
+  private searchTextOf(url: string): string {
+    const tree = this.router.parseUrl(url);
+    const onSearchPage =
+      tree.root.children["primary"]?.segments[0]?.path === "search";
+    return onSearchPage ? (tree.queryParams["item"] ?? "") : "";
+  }
 
   searchFor(item: string) {
     this.router.navigate(["/search"], { queryParams: { item } });
@@ -86,6 +91,6 @@ export class NavBarComponent {
   }
 
   logout() {
-    this.store.dispatch(logout());
+    this.auth.logout();
   }
 }

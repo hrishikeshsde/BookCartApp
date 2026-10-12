@@ -1,44 +1,51 @@
 import { ComponentFixture, TestBed } from "@angular/core/testing";
 import { provideRouter } from "@angular/router";
-import { provideStore, Store } from "@ngrx/store";
 import { Subject } from "rxjs";
 import { BookService } from "src/app/services/book.service";
-import { setAuthState } from "src/app/state/actions/auth.actions";
-import { loadBooksSuccess } from "src/app/state/actions/book.actions";
-import { addToCart } from "src/app/state/actions/cart.actions";
-import { loadSimilarBooks, loadSimilarBooksSuccess } from "src/app/state/actions/similar-books.actions";
-import { toggleWishlistItem } from "src/app/state/actions/wishlist.actions";
-import { loadWishlistSuccess } from "src/app/state/actions/wishlist.actions";
-import { AUTH_FEATURE_KEY, authReducer } from "src/app/state/reducers/auth.reducers";
-import { BOOK_FEATURE_KEY, bookReducer } from "src/app/state/reducers/book.reducers";
-import { SIMILAR_BOOKS_FEATURE_KEY, similarBooksReducer } from "src/app/state/reducers/similar-books.reducers";
-import { WISHLIST_FEATURE_KEY, wishlistReducer } from "src/app/state/reducers/wishlist.reducers";
+import { Book } from "src/app/models/book";
+import { AuthStore } from "src/app/state/auth/auth.store";
+import { BooksStore } from "src/app/state/books/books.store";
+import { CartStore } from "src/app/state/cart/cart.store";
+import { WishlistStore } from "src/app/state/wishlist/wishlist.store";
+import { fakeBooksStore } from "src/app/testing/fake-books-store";
+import { fakeAuthStore, fakeCartStore, fakeWishlistStore } from "src/app/testing/fake-stores";
 import { aBook, aUser } from "src/app/testing/fixtures";
 import { BookDetailsComponent } from "./book-details.component";
 
 describe("BookDetailsComponent", () => {
   let fixture: ComponentFixture<BookDetailsComponent>;
-  let store: Store;
-  let dispatch: ReturnType<typeof vi.spyOn>;
+  let booksStore: ReturnType<typeof fakeBooksStore>;
+  let auth: ReturnType<typeof fakeAuthStore>;
+  let cart: ReturnType<typeof fakeCartStore>;
+  let wishlist: ReturnType<typeof fakeWishlistStore>;
   let summaryRequests: { bookId: number; answer: Subject<{ summary: string }> }[];
+  let similarRequests: { bookId: number; answer: Subject<Book[]> }[];
   const root = () => fixture.nativeElement as HTMLElement;
   const generateButton = () => root().querySelector("app-book-summary button") as HTMLButtonElement;
 
   beforeEach(() => {
     summaryRequests = [];
+    similarRequests = [];
+    auth = fakeAuthStore();
+    cart = fakeCartStore();
+    wishlist = fakeWishlistStore();
+    booksStore = fakeBooksStore([aBook(1, { title: "Dune" }), aBook(2, { title: "Emma" })]);
     TestBed.configureTestingModule({
       imports: [BookDetailsComponent],
       providers: [
         provideRouter([]),
-        provideStore({
-          [BOOK_FEATURE_KEY]: bookReducer,
-          [AUTH_FEATURE_KEY]: authReducer,
-          [WISHLIST_FEATURE_KEY]: wishlistReducer,
-          [SIMILAR_BOOKS_FEATURE_KEY]: similarBooksReducer,
-        }),
+        { provide: AuthStore, useValue: auth },
+        { provide: CartStore, useValue: cart },
+        { provide: WishlistStore, useValue: wishlist },
+        { provide: BooksStore, useValue: booksStore },
         {
           provide: BookService,
           useValue: {
+            getSimilarBooks: (bookId: number) => {
+              const answer = new Subject<Book[]>();
+              similarRequests.push({ bookId, answer });
+              return answer;
+            },
             getBookSummary: (bookId: number) => {
               const answer = new Subject<{ summary: string }>();
               summaryRequests.push({ bookId, answer });
@@ -48,11 +55,7 @@ describe("BookDetailsComponent", () => {
         },
       ],
     });
-    store = TestBed.inject(Store);
-    dispatch = vi.spyOn(store, "dispatch");
     fixture = TestBed.createComponent(BookDetailsComponent);
-    // The page asks for the books when it opens; the server's answer (no effects run in this spec) is played here.
-    store.dispatch(loadBooksSuccess({ books: [aBook(1, { title: "Dune" }), aBook(2, { title: "Emma" })] }));
     fixture.componentRef.setInput("id", "1");
     fixture.detectChanges();
   });
@@ -63,39 +66,39 @@ describe("BookDetailsComponent", () => {
   });
 
   it("fetches the similar books of that book, and again when the page moves to another", () => {
-    expect(dispatch).toHaveBeenCalledWith(loadSimilarBooks({ bookId: 1 }));
+    expect(similarRequests.map((r) => r.bookId)).toEqual([1]);
 
     fixture.componentRef.setInput("id", "2");
     fixture.detectChanges();
 
-    expect(dispatch).toHaveBeenCalledWith(loadSimilarBooks({ bookId: 2 }));
+    expect(similarRequests.map((r) => r.bookId)).toEqual([1, 2]);
     expect(root().textContent).toContain("Emma");
   });
 
   it("lists the similar books it was given", () => {
-    store.dispatch(loadSimilarBooksSuccess({ books: [aBook(2), aBook(3)] }));
+    similarRequests[0].answer.next([aBook(2), aBook(3)]);
     fixture.detectChanges();
     expect(root().querySelectorAll("app-similarbooks app-book-card").length).toBe(2);
   });
 
   it("puts the book in the cart when asked", () => {
     (root().querySelector("app-addtocart button") as HTMLButtonElement).click();
-    expect(dispatch).toHaveBeenCalledWith(addToCart({ bookId: 1 }));
+    expect(cart.add).toHaveBeenCalledWith(1);
   });
 
   it("offers the wishlist only to a signed-in visitor, and reports a click", () => {
     expect(root().querySelector("app-addtowishlist")).toBeNull();
 
-    store.dispatch(setAuthState({ user: aUser() }));
+    auth.user.set(aUser());
     fixture.detectChanges();
     (root().querySelector("app-addtowishlist button") as HTMLButtonElement).click();
 
-    expect(dispatch).toHaveBeenCalledWith(toggleWishlistItem({ bookId: 1, isAdd: true }));
+    expect(wishlist.toggle).toHaveBeenCalledWith({ bookId: 1, isAdd: true });
   });
 
   it("knows the book is on the wishlist", () => {
-    store.dispatch(setAuthState({ user: aUser() }));
-    store.dispatch(loadWishlistSuccess({ wishlist: [aBook(1)] }));
+    auth.user.set(aUser());
+    wishlist.items.set([aBook(1)]);
     fixture.detectChanges();
     expect(root().querySelector("app-addtowishlist button")?.textContent).toContain("Remove from Wishlist");
   });

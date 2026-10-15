@@ -1,16 +1,13 @@
-th,
-td {
-  width: 18%;
-}
+// A wishlist row has no quantity or total: the "Add to Cart" button takes the controls' place, and the
+// "Remove from Wishlist" button the last column (the shared list look is in styles.scss).
+.item-row {
+  grid-template-columns: 4rem minmax(0, 1fr) auto auto;
+  grid-template-areas: "thumb info controls remove";
 
-td:last-child {
-  width: 20%;
-}
-
-tr:last-child td {
-  border-bottom: 1px solid #0000001f;
-}
-
-img {
-  width: 50%;
+  @media (max-width: 40rem) {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "thumb info"
+      "controls remove";
+  }
 }

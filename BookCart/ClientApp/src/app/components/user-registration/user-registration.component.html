@@ -1,17 +1,14 @@
-<div class="d-flex justify-content-center">
-  <mat-card class="my-4 w-50">
-    <mat-card-header
-      class="custom-card-header justify-content-between mat-elevation-z2"
-    >
-      <mat-card-title class="mat-h1"> User Registration </mat-card-title>
+<mat-card class="mx-auto my-6 w-full max-w-xl">
+    <mat-card-header class="custom-card-header flex-wrap justify-between gap-2">
+      <mat-card-title><h1 class="card-heading">User Registration</h1></mat-card-title>
       <div>
-        <span class="mat-h4">Already Registered? </span>
-        <button mat-raised-button [routerLink]="['/login']">Login</button>
+        <span class="card-subheading">Already Registered? </span>
+        <button matButton="tonal" [routerLink]="['/login']">Login</button>
       </div>
     </mat-card-header>
-    <mat-card-content class="p-3">
+    <mat-card-content class="p-4">
       <form [formGroup]="registrationForm" (ngSubmit)="registerUser()">
-        <mat-form-field class="w-100" appearance="outline">
+        <mat-form-field class="w-full" appearance="outline">
           <mat-label>First name</mat-label>
           <input
             matInput
@@ -25,7 +22,7 @@
           }
         </mat-form-field>
 
-        <mat-form-field class="w-100" appearance="outline">
+        <mat-form-field class="w-full" appearance="outline">
           <mat-label>Last name</mat-label>
           <input
             matInput
@@ -39,7 +36,7 @@
           }
         </mat-form-field>
 
-        <mat-form-field class="w-100" appearance="outline">
+        <mat-form-field class="w-full" appearance="outline">
           <mat-label>User name</mat-label>
           <input
             matInput
@@ -56,7 +53,7 @@
           }
         </mat-form-field>
 
-        <mat-form-field class="w-100" appearance="outline">
+        <mat-form-field class="w-full" appearance="outline">
           <mat-label>Password</mat-label>
           <input
             matInput
@@ -65,9 +62,16 @@
             [type]="showPassword ? 'password' : 'text'"
             required
           />
-          <mat-icon matSuffix (click)="showPassword = !showPassword">{{
-            showPassword ? "visibility_off" : "visibility"
-          }}</mat-icon>
+          <button
+            matIconButton
+            matSuffix
+            type="button"
+            [attr.aria-label]="showPassword ? 'Show password' : 'Hide password'"
+            [attr.aria-pressed]="!showPassword"
+            (click)="showPassword = !showPassword"
+          >
+            <mat-icon>{{ showPassword ? "visibility_off" : "visibility" }}</mat-icon>
+          </button>
           @if ( registrationFormControl.password.touched &&
           registrationFormControl.password.errors?.required ) {
           <mat-error>Password is required </mat-error>
@@ -80,7 +84,7 @@
           }
         </mat-form-field>
 
-        <mat-form-field class="w-100" appearance="outline">
+        <mat-form-field class="w-full" appearance="outline">
           <mat-label>Confirm Password</mat-label>
           <input
             matInput
@@ -89,14 +93,16 @@
             [type]="showConfirmPassword ? 'password' : 'text'"
             required
           />
-          <mat-icon
+          <button
+            matIconButton
             matSuffix
+            type="button"
+            [attr.aria-label]="showConfirmPassword ? 'Show password' : 'Hide password'"
+            [attr.aria-pressed]="!showConfirmPassword"
             (click)="showConfirmPassword = !showConfirmPassword"
           >
-            {{
-              showConfirmPassword ? "visibility_off" : "visibility"
-            }}</mat-icon
-          >
+            <mat-icon>{{ showConfirmPassword ? "visibility_off" : "visibility" }}</mat-icon>
+          </button>
           @if ( registrationFormControl.confirmPassword.touched &&
           registrationFormControl.confirmPassword.errors?.required ) {
           <mat-error>Password is required </mat-error>
@@ -116,9 +122,8 @@
         <mat-error>Gender is required</mat-error>
         }
         <mat-card-actions align="end" class="p-0">
-          <button mat-raised-button color="primary">Register</button>
+          <button matButton="filled">Register</button>
         </mat-card-actions>
       </form>
     </mat-card-content>
-  </mat-card>
-</div>
+</mat-card>

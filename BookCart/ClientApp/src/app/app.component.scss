@@ -1,0 +1,28 @@
+// A link for keyboard users that jumps over the toolbar; it shows only while it has focus.
+.skip-link {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 200;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  color: var(--mat-sys-on-primary);
+  background: var(--mat-sys-primary);
+  transform: translateY(-200%);
+
+  &:focus {
+    transform: none;
+  }
+}
+
+// The toolbar stays at the top of the page while the page scrolls.
+header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: var(--mat-sys-level2);
+}
+
+main:focus {
+  outline: none;
+}

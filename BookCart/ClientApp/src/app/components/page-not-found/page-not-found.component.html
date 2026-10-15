@@ -1,12 +1,10 @@
-<mat-card class="my-3">
+<mat-card class="my-6">
   <mat-card-header>
     <mat-card-title>
-      The resource you are looking for is not found.
+      <h1 class="card-heading">The resource you are looking for is not found.</h1>
     </mat-card-title>
   </mat-card-header>
   <mat-card-content>
-    <button mat-raised-button color="primary" [routerLink]="['/']" class="mt-2">
-      Back to Home
-    </button>
+    <a matButton="filled" class="mt-2" [routerLink]="['/']">Back to Home</a>
   </mat-card-content>
 </mat-card>

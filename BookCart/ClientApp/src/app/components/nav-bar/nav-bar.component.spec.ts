@@ -1,5 +1,7 @@
+import { BreakpointObserver } from "@angular/cdk/layout";
 import { ComponentFixture, TestBed } from "@angular/core/testing";
 import { provideRouter, Router } from "@angular/router";
+import { of } from "rxjs";
 import { AuthStore } from "src/app/state/auth/auth.store";
 import { BooksStore } from "src/app/state/books/books.store";
 import { CartStore } from "src/app/state/cart/cart.store";
@@ -123,5 +125,67 @@ describe("NavBarComponent", () => {
       fixture.componentInstance.logout();
       expect(auth.logout).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+describe("NavBarComponent on a phone", () => {
+  let fixture: ComponentFixture<NavBarComponent>;
+  let auth: ReturnType<typeof fakeAuthStore>;
+  let cart: ReturnType<typeof fakeCartStore>;
+  const root = () => fixture.nativeElement as HTMLElement;
+  const rows = () => root().querySelectorAll("mat-toolbar-row");
+
+  beforeEach(() => {
+    auth = fakeAuthStore();
+    cart = fakeCartStore();
+    TestBed.configureTestingModule({
+      imports: [NavBarComponent],
+      providers: [
+        provideRouter([]),
+        { provide: BreakpointObserver, useValue: { observe: () => of({ matches: true, breakpoints: {} }) } },
+        { provide: BooksStore, useValue: fakeBooksStore([]) },
+        { provide: AuthStore, useValue: auth },
+        { provide: CartStore, useValue: cart },
+        { provide: WishlistStore, useValue: fakeWishlistStore() },
+      ],
+    });
+    fixture = TestBed.createComponent(NavBarComponent);
+    fixture.detectChanges();
+  });
+
+  it("puts the search box on a row of its own", () => {
+    expect(rows().length).toBe(2);
+    expect(rows()[1].querySelector("app-search")).not.toBeNull();
+    expect(rows()[0].querySelector("app-search")).toBeNull();
+  });
+
+  it("collapses the links into one menu button and drops the wide-screen links", () => {
+    expect(root().querySelector('button[aria-label="Menu"]')).not.toBeNull();
+    expect(root().textContent).not.toContain("API docs");
+    expect(root().textContent).not.toContain("GitHub");
+  });
+
+  it("the menu offers Login and Register to a guest", () => {
+    (root().querySelector('button[aria-label="Menu"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const items = Array.from(document.querySelectorAll(".mat-mdc-menu-item")).map((i) => i.textContent?.trim());
+    expect(items).toContain("Login");
+    expect(items).toContain("Register");
+    expect(items).not.toContain("Logout");
+  });
+
+  it("the menu offers My Orders and Logout to a signed-in user, and Admin Panel only to an admin", () => {
+    auth.user.set(aUser({ userTypeName: "Admin" }));
+    fixture.detectChanges();
+    (root().querySelector('button[aria-label="Menu"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const items = Array.from(document.querySelectorAll(".mat-mdc-menu-item")).map((i) => i.textContent?.trim());
+    expect(items).toEqual(expect.arrayContaining(["My Orders", "Admin Panel", "Logout"]));
+  });
+
+  it("the cart icon has a name that says how many items are in it", () => {
+    cart.items.set([aCartItem(1, 2), aCartItem(2, 3)]);
+    fixture.detectChanges();
+    expect(root().querySelector('a[aria-label^="Shopping cart"]')?.getAttribute("aria-label")).toBe("Shopping cart, 5 items");
   });
 });

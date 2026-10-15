@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed } from "@angular/core/testing";
+import { ComponentFixture, DeferBlockBehavior, DeferBlockState, TestBed } from "@angular/core/testing";
 import { provideRouter } from "@angular/router";
 import { Subject } from "rxjs";
 import { BookService } from "src/app/services/book.service";
@@ -32,6 +32,8 @@ describe("BookDetailsComponent", () => {
     booksStore = fakeBooksStore([aBook(1, { title: "Dune" }), aBook(2, { title: "Emma" })]);
     TestBed.configureTestingModule({
       imports: [BookDetailsComponent],
+      // The similar books wait for the viewport; jsdom has no viewport, so the spec opens the block itself.
+      deferBlockBehavior: DeferBlockBehavior.Manual,
       providers: [
         provideRouter([]),
         { provide: AuthStore, useValue: auth },
@@ -75,9 +77,14 @@ describe("BookDetailsComponent", () => {
     expect(root().textContent).toContain("Emma");
   });
 
-  it("lists the similar books it was given", () => {
+  it("shows the similar books once they come into view (they sit in a defer block)", async () => {
+    expect(root().querySelector("app-similarbooks")).toBeNull();
+
+    const [similar] = await fixture.getDeferBlocks();
+    await similar.render(DeferBlockState.Complete);
     similarRequests[0].answer.next([aBook(2), aBook(3)]);
     fixture.detectChanges();
+
     expect(root().querySelectorAll("app-similarbooks app-book-card").length).toBe(2);
   });
 

@@ -1,15 +1,15 @@
 @if (checkOutItems(); as checkOutItems) {
-<mat-card class="my-4">
-  <mat-card-header class="custom-card-header mat-elevation-z2">
-    <mat-card-title class="mat-h1">Check Out </mat-card-title>
+<mat-card class="my-6">
+  <mat-card-header class="custom-card-header">
+    <mat-card-title><h1 class="card-heading">Check Out</h1></mat-card-title>
   </mat-card-header>
   <mat-card-content class="p-2">
-    <div class="row">
-      <div class="col-md-6">
+    <div class="grid gap-6 md:grid-cols-2">
+      <div>
         <mat-card-content>
           <mat-card-title> Shipping address </mat-card-title>
           <form [formGroup]="checkOutForm" (ngSubmit)="placeOrder()">
-            <mat-form-field class="w-100" appearance="outline">
+            <mat-form-field class="w-full" appearance="outline">
               <mat-label>Name</mat-label>
               <input
                 matInput
@@ -23,7 +23,7 @@
               }
             </mat-form-field>
 
-            <mat-form-field class="w-100" appearance="outline">
+            <mat-form-field class="w-full" appearance="outline">
               <mat-label>Address Line 1</mat-label>
               <input
                 matInput
@@ -37,7 +37,7 @@
               }
             </mat-form-field>
 
-            <mat-form-field class="w-100" appearance="outline">
+            <mat-form-field class="w-full" appearance="outline">
               <mat-label>Address Line 2</mat-label>
               <input
                 matInput
@@ -51,7 +51,7 @@
               }
             </mat-form-field>
 
-            <mat-form-field class="w-100" appearance="outline">
+            <mat-form-field class="w-full" appearance="outline">
               <mat-label>Pincode</mat-label>
               <input
                 matInput
@@ -69,7 +69,7 @@
               </mat-error>
               }
             </mat-form-field>
-            <mat-form-field class="w-100" appearance="outline">
+            <mat-form-field class="w-full" appearance="outline">
               <mat-label>State</mat-label>
               <input
                 matInput
@@ -84,17 +84,15 @@
             </mat-form-field>
             <mat-card-actions align="end" class="p-0">
               <button
+                matButton="filled"
                 type="submit"
-                mat-raised-button
-                color="primary"
                 [disabled]="checkOutForm.disabled || placing()"
               >
                 Place Order
               </button>
               <button
+                matButton="outlined"
                 class="ms-2"
-                mat-raised-button
-                color="warn"
                 [routerLink]="['/shopping-cart']"
               >
                 Cancel
@@ -103,14 +101,15 @@
           </form>
         </mat-card-content>
       </div>
-      <div class="col-md-6">
+      <div class="min-w-0">
         @if (checkOutItems.pending) {
-        <div class="d-flex justify-content-center">
+        <div class="flex justify-center">
           <mat-spinner></mat-spinner>
         </div>
         } @else { @if (checkOutItems.items.length > 0) {
         <mat-card-title> Order Summary </mat-card-title>
-        <table class="table">
+        <div class="overflow-x-auto">
+        <table class="summary">
           <thead>
             <tr>
               <th>Title</th>
@@ -133,7 +132,7 @@
             </tr>
             }
           </tbody>
-          <tfoot class="table">
+          <tfoot>
             <tr>
               <td></td>
               <td></td>
@@ -142,22 +141,13 @@
             </tr>
           </tfoot>
         </table>
+        </div>
         } @else if(checkOutItems.items.length === 0 && checkOutItems.loaded) {
-        <mat-card-header class="d-flex justify-content-center">
-          <mat-card-title> There are no items in your cart. </mat-card-title>
-        </mat-card-header>
-        <mat-card-content class="d-flex justify-content-center">
-          <button
-            mat-raised-button
-            color="primary"
-            [routerLink]="['/']"
-            class="mt-2"
-          >
-            Start shopping
-          </button>
-        </mat-card-content>
+        <div class="flex flex-col items-center gap-4 py-6">
+          <h2 class="card-heading">There are no items in your cart.</h2>
+          <a matButton="filled" [routerLink]="['/']">Start shopping</a>
+        </div>
         } }
-        <mat-card-content> </mat-card-content>
       </div>
     </div>
   </mat-card-content>

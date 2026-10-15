@@ -1,26 +1,27 @@
-<mat-card class="my-4">
-  <mat-card-header class="mat-elevation-z2 custom-card-header">
-    <mat-card-title class="mat-h1"> Similar Books </mat-card-title>
+<mat-card class="my-6">
+  <mat-card-header class="custom-card-header">
+    <mat-card-title class="card-heading"> Similar Books </mat-card-title>
   </mat-card-header>
-  <mat-card-content class="p-3">
+  <mat-card-content class="p-4">
     @if (loading()) {
-    <div class="d-flex align-items-center justify-content-center">
+    <div class="flex items-center justify-center">
       <mat-spinner></mat-spinner>
     </div>
     } @else {
-    <div class="d-flex justify-content-start flex-wrap">
+    <ul class="grid list-none grid-cols-2 gap-3 p-0 m-0 sm:grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] sm:gap-4">
       @for (book of books(); track book.bookId) {
-      <div class="p-1">
+      <li class="flex">
         <app-book-card
+          class="w-full"
           [book]="book"
           [signedIn]="signedIn()"
           [wishlisted]="wishlistedIds().has(book.bookId)"
           (addToCart)="addToCart.emit($event)"
           (toggleWishlist)="toggleWishlist.emit($event)"
         ></app-book-card>
-      </div>
+      </li>
       }
-    </div>
+    </ul>
     }
   </mat-card-content>
 </mat-card>

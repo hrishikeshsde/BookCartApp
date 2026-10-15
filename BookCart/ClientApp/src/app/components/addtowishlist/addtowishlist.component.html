@@ -1,20 +1,22 @@
 @if (showButton()) {
 <button
-  [ngClass]="{ wishlisted: selected(), 'not-wishlisted': !selected() }"
-  mat-raised-button
+  type="button"
+  [matButton]="selected() ? 'tonal' : 'filled'"
+  [class.wishlisted]="selected()"
+  [class.not-wishlisted]="!selected()"
   (click)="toggleValue()"
 >
   {{ buttonText() }}
 </button>
 } @else {
-<span
+<button
+  type="button"
+  class="heart"
+  [class.favourite-selected]="selected()"
+  [class.favourite-unselected]="!selected()"
+  [attr.aria-label]="heartLabel()"
   (click)="toggleValue()"
-  [ngClass]="{
-    'favourite-selected': selected(),
-    'favourite-unselected': !selected()
-  }"
-  class="material-icons"
 >
-  favorite
-</span>
+  <span class="material-icons" aria-hidden="true">favorite</span>
+</button>
 }

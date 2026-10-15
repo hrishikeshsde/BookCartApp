@@ -1,29 +1,20 @@
-<mat-card class="mt-4">
-  <mat-card-content class="row g-0 d-flex p-3">
-    <div class="col-md-5 col-sm-12">
-      <button
-        class="btn-gemini"
-        color="primary"
-        mat-raised-button
-        (click)="generate.emit()"
-      >
-        <span
-          ><img
-            class="gemini-icon"
-            src="https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg"
-        /></span>
-        Generate book plot summary using Google Gemini
-      </button>
-    </div>
+<mat-card class="mt-6">
+  <mat-card-content class="p-4">
+    <button matButton="filled" (click)="generate.emit()">
+      <mat-icon>auto_awesome</mat-icon>
+      Generate book plot summary using Google Gemini
+    </button>
 
-    @if (loading()) {
-    <div class="d-flex justify-content-center mt-4">
-      <mat-spinner diameter="50"></mat-spinner>
+    <div aria-live="polite">
+      @if (loading()) {
+      <div class="flex justify-center mt-6">
+        <mat-spinner diameter="50"></mat-spinner>
+      </div>
+      } @else { @if (error()) {
+      <p class="mt-6 mb-0">{{ error() }}</p>
+      } @else if (summary().length > 0) {
+      <p class="mt-6 mb-0">{{ summary() }}</p>
+      } }
     </div>
-    } @else { @if (error()) {
-    <p class="mt-4">{{ error() }}</p>
-    } @else if (summary().length > 0) {
-    <p class="mt-4">{{ summary() }}</p>
-    } }
   </mat-card-content>
 </mat-card>

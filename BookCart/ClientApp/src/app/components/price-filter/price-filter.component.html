@@ -1,7 +1,7 @@
 @if (range(); as bookPriceRange) {
-<mat-card class="my-4">
-  <mat-card-header class="custom-card-header justify-content-between">
-    <mat-card-title class="mat-h1"> Price Filter </mat-card-title>
+<mat-card class="my-6">
+  <mat-card-header class="custom-card-header justify-between">
+    <mat-card-title class="card-heading"> Price Filter </mat-card-title>
   </mat-card-header>
   <mat-card-content>
     <mat-slider
@@ -14,13 +14,14 @@
     >
       <input
         [value]="bookPriceRange.maxPrice"
+        aria-label="Highest price"
         matSliderThumb
         (change)="onChange($event)"
       />
     </mat-slider>
   </mat-card-content>
   <mat-card-content>
-    <div class="d-flex justify-content-between">
+    <div class="flex justify-between">
       <div>
         <strong>{{ bookPriceRange.minPrice | currency : "INR" }}</strong>
       </div>

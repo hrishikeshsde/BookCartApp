@@ -28,7 +28,7 @@ describe("HomeComponent", () => {
   const categoriesStore = { categories: signal([{ categoryId: 1, categoryName: "Fiction" }]), load: vi.fn() };
   const root = () => fixture.nativeElement as HTMLElement;
   const titles = () =>
-    Array.from(root().querySelectorAll("app-book-card .card-title strong")).map((e) => e.textContent?.trim());
+    Array.from(root().querySelectorAll("app-book-card .title a")).map((e) => e.textContent?.trim());
 
   beforeEach(() => {
     booksStore = fakeBooksStore(books);
@@ -99,6 +99,54 @@ describe("HomeComponent", () => {
 
     expect(root().querySelector("mat-spinner")).not.toBeNull();
     expect(root().textContent).not.toContain("No books found.");
+  });
+
+  describe("paging", () => {
+    const many = Array.from({ length: 30 }, (_, i) => aBook(i + 1, { title: `Book ${i + 1}`, price: 100 }));
+    const paginator = () => root().querySelector("mat-paginator");
+    const nextPage = () => (root().querySelector("button.mat-mdc-paginator-navigation-next") as HTMLButtonElement).click();
+
+    beforeEach(() => {
+      booksStore.entities.set(many);
+      fixture.detectChanges();
+    });
+
+    it("shows the first twelve books and a paginator when there are more", () => {
+      expect(titles().length).toBe(12);
+      expect(titles()[0]).toBe("Book 1");
+      expect(paginator()).not.toBeNull();
+    });
+
+    it("shows no paginator when everything fits on one page", () => {
+      booksStore.entities.set(many.slice(0, 5));
+      fixture.detectChanges();
+      expect(titles().length).toBe(5);
+      expect(paginator()).toBeNull();
+    });
+
+    it("the next page shows the next books", () => {
+      nextPage();
+      fixture.detectChanges();
+      expect(titles()[0]).toBe("Book 13");
+      expect(titles().length).toBe(12);
+    });
+
+    it("goes back to the first page when a filter changes what is listed", () => {
+      nextPage();
+      fixture.detectChanges();
+      expect(titles()[0]).toBe("Book 13");
+
+      fixture.componentRef.setInput("item", "book 2");
+      fixture.detectChanges();
+
+      expect(titles()[0]).toBe("Book 2");
+    });
+
+    it("the first books load first (priority) and the rest wait until they come near the screen", () => {
+      const cards = Array.from(root().querySelectorAll("app-book-card img")) as HTMLImageElement[];
+      expect(cards[0].getAttribute("fetchpriority")).toBe("high");
+      expect(cards[11].getAttribute("loading")).toBe("lazy");
+    });
   });
 
   it("keeps the books on screen while they are being reloaded", () => {

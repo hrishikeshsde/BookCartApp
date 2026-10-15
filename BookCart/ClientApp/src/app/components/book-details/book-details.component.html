@@ -1,76 +1,71 @@
 @if (bookDetails(); as bookDetails) {
 <!-- Loading State -->
 @if (bookDetails.isLoading) {
-<div class="d-flex flex-column align-items-center mt-4">
+<div class="flex flex-col items-center mt-6">
   <mat-spinner></mat-spinner>
-  <p class="mt-3">Loading book details...</p>
+  <p class="mt-4">Loading book details...</p>
 </div>
 }
 <!-- Error State -->
 @else if (bookDetails.hasError) {
-<div class="d-flex flex-column align-items-center mt-4">
+<div class="flex flex-col items-center mt-6">
   <div>
-    <h1 class="display-4">Error loading book details</h1>
+    <h1 class="card-heading">Error loading book details</h1>
   </div>
   <div>
-    <button mat-raised-button color="primary" [routerLink]="['/']">
+    <a matButton="filled" [routerLink]="['/']">
       Back to Home
-    </button>
+    </a>
   </div>
 </div>
 }
 <!-- Success State with Book Data -->
 @else if (bookDetails.book) {
-<mat-card class="mt-4">
-  <mat-card-header class="mat-elevation-z2 custom-card-header">
-    <mat-card-title class="mat-h1">Book Details</mat-card-title>
+<mat-card class="mt-6">
+  <mat-card-header class="custom-card-header">
+    <mat-card-title><h1 class="card-heading">Book Details</h1></mat-card-title>
   </mat-card-header>
-  <mat-card-content class="row g-0 d-flex p-3">
-    <div class="col-md-3 col-sm-12">
+  <mat-card-content>
+   <div class="grid gap-6 p-4 md:grid-cols-[14rem_minmax(0,1fr)]">
+    <div class="cover">
       <img
-        mat-card-image
-        src="/Upload/{{ bookDetails.book.coverFileName }}"
-        alt="No image available"
+        [ngSrc]="'/Upload/' + bookDetails.book.coverFileName"
+        fill
+        priority
+        sizes="(min-width: 48rem) 14rem, 60vw"
+        [alt]="bookDetails.book.title + ' cover'"
       />
     </div>
-    <div class="col-md-5 col-sm-12 d-flex flex-column justify-content-between">
-      <table class="table table-lg">
-        <tbody>
-          <tr>
-            <td><strong>Title</strong></td>
-            <td>{{ bookDetails.book.title }}</td>
-          </tr>
-          <tr>
-            <td><strong>Author</strong></td>
-            <td>{{ bookDetails.book.author }}</td>
-          </tr>
-          <tr>
-            <td><strong>Category</strong></td>
-            <td>{{ bookDetails.book.category }}</td>
-          </tr>
-          <tr>
-            <td><strong>Price</strong></td>
-            <td>{{ bookDetails.book.price | currency : "INR" }}</td>
-          </tr>
-        </tbody>
-      </table>
-      <div>
+    <div class="flex flex-col justify-between gap-4">
+      <dl class="details">
+        <dt>Title</dt>
+        <dd>{{ bookDetails.book.title }}</dd>
+        <dt>Author</dt>
+        <dd>{{ bookDetails.book.author }}</dd>
+        <dt>Category</dt>
+        <dd>{{ bookDetails.book.category }}</dd>
+        <dt>Price</dt>
+        <dd>{{ bookDetails.book.price | currency : "INR" }}</dd>
+      </dl>
+      <div class="flex flex-wrap items-center gap-2">
         <app-addtocart
           [bookId]="bookDetails.book.bookId"
+          [bookTitle]="bookDetails.book.title"
           (add)="addToCart($event)"
         ></app-addtocart>
         @if (bookDetails.isAuthenticated) {
         <app-addtowishlist
           [bookId]="bookDetails.book.bookId"
+          [bookTitle]="bookDetails.book.title"
           [wishlisted]="wishlistedIds().has(bookDetails.book.bookId)"
           [showButton]="true"
           (toggle)="toggleWishlist($event)"
-          class="ms-2"
         >
         </app-addtowishlist>
         }
       </div>
     </div>
+   </div>
   </mat-card-content>
 </mat-card>
 <app-book-summary
@@ -79,6 +74,7 @@
   [error]="summaryError()"
   (generate)="generateSummary()"
 ></app-book-summary>
+@defer (on viewport) {
 <app-similarbooks
   [books]="similarBooks()"
   [loading]="similarLoading()"
@@ -87,17 +83,20 @@
   (addToCart)="addToCart($event)"
   (toggleWishlist)="toggleWishlist($event)"
 ></app-similarbooks>
+} @placeholder {
+<div class="mt-6 min-h-48" aria-hidden="true"></div>
+}
 }
 <!-- No Book Found State -->
 @else {
-<div class="d-flex flex-column align-items-center mt-4">
+<div class="flex flex-col items-center mt-6">
   <div>
     <h1 class="display-4">No books found.</h1>
   </div>
   <div>
-    <button mat-raised-button color="primary" [routerLink]="['/']">
+    <a matButton="filled" [routerLink]="['/']">
       Back to Home
-    </button>
+    </a>
   </div>
 </div>
 } }

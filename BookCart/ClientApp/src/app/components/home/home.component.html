@@ -1,39 +1,52 @@
-<div class="row no-gutters pt-3">
-  <div class="col-md-3 col-sm-12">
-    <div class="filter-container">
-      <app-book-filter
-        [category]="category() ?? ''"
-        [categories]="categories()"
-      ></app-book-filter>
-      <app-price-filter
-        [range]="priceRange()"
-        (priceChange)="priceFilter.set($event)"
-      ></app-price-filter>
-    </div>
-  </div>
-  <div class="col mb-3">
+<h1 class="sr-only">Books</h1>
+<div class="grid gap-6 md:grid-cols-[16rem_minmax(0,1fr)] md:items-start">
+  <aside class="md:sticky md:top-24" aria-label="Filters">
+    <app-book-filter
+      [category]="category() ?? ''"
+      [categories]="categories()"
+    ></app-book-filter>
+    <app-price-filter
+      [range]="priceRange()"
+      (priceChange)="priceFilter.set($event)"
+    ></app-price-filter>
+  </aside>
+  <section aria-label="Books">
     @if (visibleBooks().length > 0) {
-    <div class="d-flex justify-content-start card-deck-container mb-4">
-      @for (book of visibleBooks(); track book.bookId) {
-      <div class="p-1">
+    <ul class="grid list-none grid-cols-2 gap-3 p-0 m-0 sm:grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] sm:gap-4">
+      <!-- Keyed by place, not by book: the first places load their pictures first, and that cannot change per image. -->
+      @for (book of pagedBooks(); track $index; let i = $index) {
+      <li class="flex">
         <app-book-card
+          class="w-full"
           [book]="book"
+          [priority]="i < 6"
           [signedIn]="signedIn()"
           [wishlisted]="wishlistedIds().has(book.bookId)"
           (addToCart)="addToCart($event)"
           (toggleWishlist)="toggleWishlist($event)"
         ></app-book-card>
-      </div>
+      </li>
       }
-    </div>
+    </ul>
+    @if (visibleBooks().length > pageSizes[0]) {
+    <mat-paginator
+      class="mt-4"
+      aria-label="Pages of books"
+      [length]="visibleBooks().length"
+      [pageSize]="pageSize()"
+      [pageIndex]="pageIndex()"
+      [pageSizeOptions]="pageSizes"
+      (page)="onPage($event)"
+    ></mat-paginator>
+    }
     } @else if (firstLoad()) {
-    <div class="d-flex align-items-center justify-content-center mt-4">
+    <div class="flex items-center justify-center mt-6">
       <mat-spinner></mat-spinner>
     </div>
     } @else {
-    <div class="d-flex justify-content-center mt-4">
-      <h1 class="display-4">No books found.</h1>
+    <div class="flex justify-center mt-6">
+      <h1 class="card-heading">No books found.</h1>
     </div>
     }
-  </div>
+  </section>
 </div>

@@ -1,20 +1,30 @@
-img {
-  height: 350px;
-  width: 250px;
-  transition: transform 0.5s;
+.cover {
+  position: relative;
+  aspect-ratio: 200 / 260;
+  max-width: 14rem;
+  width: 100%;
+  background: var(--mat-sys-surface-container-high);
+
+  img {
+    object-fit: cover;
+    border-radius: 0.5rem;
+  }
 }
 
-img:hover {
-  transform: scale(1.5);
-}
+// Label and value side by side, a line under each pair.
+.details {
+  display: grid;
+  grid-template-columns: minmax(6rem, 30%) minmax(0, 1fr);
+  margin: 0;
 
-td {
-  border-top: 0;
-  border-bottom: 1px solid #dee2e6;
-  width: 30%;
-  padding: 20px;
-}
+  dt,
+  dd {
+    margin: 0;
+    padding: 1rem 0.75rem;
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
+  }
 
-td:nth-child(2) {
-  width: 70%;
+  dt {
+    font-weight: 500;
+  }
 }

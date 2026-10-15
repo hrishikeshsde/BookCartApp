@@ -1,4 +1,4 @@
-import { CurrencyPipe } from "@angular/common";
+import { CurrencyPipe, NgOptimizedImage } from "@angular/common";
 import {
   ChangeDetectionStrategy,
   Component,
@@ -14,19 +14,6 @@ import {
   MatCardTitle,
 } from "@angular/material/card";
 import { MatProgressSpinner } from "@angular/material/progress-spinner";
-import {
-  MatCell,
-  MatCellDef,
-  MatColumnDef,
-  MatHeaderCell,
-  MatHeaderCellDef,
-  MatHeaderRow,
-  MatHeaderRowDef,
-  MatRow,
-  MatRowDef,
-  MatTable,
-} from "@angular/material/table";
-import { MatTooltip } from "@angular/material/tooltip";
 import { RouterLink } from "@angular/router";
 import { WishlistToggle } from "src/app/models/wishlist-toggle";
 import { CartStore } from "src/app/state/cart/cart.store";
@@ -35,33 +22,23 @@ import { AddtocartComponent } from "../addtocart/addtocart.component";
 import { AddtowishlistComponent } from "../addtowishlist/addtowishlist.component";
 
 @Component({
-    selector: "app-wishlist",
-    templateUrl: "./wishlist.component.html",
-    styleUrls: ["./wishlist.component.scss"],
-    changeDetection: ChangeDetectionStrategy.OnPush,
-    imports: [
-        MatProgressSpinner,
-        MatCard,
-        MatCardHeader,
-        MatCardTitle,
-        MatCardContent,
-        MatButton,
-        RouterLink,
-        MatTable,
-        MatColumnDef,
-        MatHeaderCellDef,
-        MatHeaderCell,
-        MatCellDef,
-        MatCell,
-        MatTooltip,
-        AddtocartComponent,
-        AddtowishlistComponent,
-        MatHeaderRowDef,
-        MatHeaderRow,
-        MatRowDef,
-        MatRow,
-        CurrencyPipe,
-    ]
+  selector: "app-wishlist",
+  templateUrl: "./wishlist.component.html",
+  styleUrls: ["./wishlist.component.scss"],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [
+    MatProgressSpinner,
+    MatCard,
+    MatCardHeader,
+    MatCardTitle,
+    MatCardContent,
+    MatButton,
+    RouterLink,
+    NgOptimizedImage,
+    AddtocartComponent,
+    AddtowishlistComponent,
+    CurrencyPipe,
+  ],
 })
 export class WishlistComponent implements OnInit {
   private readonly wishlist = inject(WishlistStore);
@@ -71,7 +48,6 @@ export class WishlistComponent implements OnInit {
     items: this.wishlist.items(),
     loading: this.wishlist.loading(),
   }));
-  displayedColumns: string[] = ["image", "title", "price", "cart", "wishlist"];
 
   ngOnInit(): void {
     this.wishlist.load();

@@ -1,50 +1,175 @@
-@import "../node_modules/bootstrap/dist/css/bootstrap-grid.min.css";
-@import "../node_modules/bootstrap/dist/css/bootstrap-reboot.min.css";
+// Application-wide styles. The colours, fonts and shadows all come from the Material 3 tokens (--mat-sys-*, see
+// styles/theme.scss), so they follow the theme and its dark mode; there are no colour codes in this app's styles.
+// Layout comes from Tailwind utilities in the templates (styles/tailwind.css).
+
+// The few reset rules the app relies on (Tailwind's reset is not used, see styles/tailwind.css).
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
 
 body {
-  font-size: 16px;
   margin: 0;
-  font-family: Roboto, "Helvetica Neue", sans-serif;
-  line-height: 1.5;
+  font: var(--mat-sys-body-large);
   font-kerning: normal;
-  background: #fafafa;
+  color: var(--mat-sys-on-surface);
+  background: var(--mat-sys-surface);
 }
 
-.container {
-  padding-top: 60px;
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0 0 0.5rem;
 }
 
-// start: style the scrollbar
-::-webkit-scrollbar {
-  width: 8px;
+p {
+  margin: 0 0 1rem;
 }
 
-::-webkit-scrollbar-track {
-  box-shadow: inset 0 0 5px grey;
-  border-radius: 8px;
+img,
+svg {
+  vertical-align: middle;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #b30000;
-  border-radius: 8px;
-}
-// end: style the scrollbar
-
-.custom-card-header {
-  background: #ff4081;
-  color: #fff;
+table {
+  border-collapse: collapse;
 }
 
 a {
+  color: var(--mat-sys-primary);
   text-decoration: none;
 }
 
-.w-100 {
-  width: 100% 
+// The page column: centred, with a side margin that never touches the screen edge.
+.page {
+  width: 100%;
+  max-width: 82.5rem;
+  margin-inline: auto;
+  padding-inline: 0.75rem;
 }
 
-.w-50 {
-  width: 50% 
+// The coloured band on top of a page's card (its title and, on some pages, a button).
+// The element name raises the selector above Material's own card-header padding.
+mat-card-header.custom-card-header {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: var(--mat-sys-tertiary-container);
+  color: var(--mat-sys-on-tertiary-container);
+  box-shadow: var(--mat-sys-level1);
+}
+
+// Card titles: the size the old Material "h1" gave them.
+.card-heading {
+  font: var(--mat-sys-headline-small);
+  margin: 0;
+}
+
+.card-subheading {
+  font: var(--mat-sys-title-medium);
+  margin: 0;
+}
+
+// A list of books with their own controls (the cart and the wishlist): a picture, the title and price, then the controls.
+// On a wide screen each row is one line; on a phone the controls drop under the title.
+.item-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item-row {
+  display: grid;
+  grid-template-columns: 4rem minmax(0, 1fr) auto auto auto;
+  grid-template-areas: "thumb info controls total remove";
+  align-items: center;
+  gap: 0.5rem 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+
+  .thumb {
+    grid-area: thumb;
+    position: relative;
+    aspect-ratio: 200 / 260;
+    background: var(--mat-sys-surface-container-high);
+
+    img {
+      object-fit: cover;
+    }
+  }
+
+  .info {
+    grid-area: info;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+
+    .title {
+      font: var(--mat-sys-title-small);
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .muted {
+      color: var(--mat-sys-on-surface-variant);
+    }
+  }
+
+  .controls {
+    grid-area: controls;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .total {
+    grid-area: total;
+    min-width: 5rem;
+    text-align: end;
+    font-weight: 500;
+  }
+
+  .remove {
+    grid-area: remove;
+  }
+
+  @media (max-width: 40rem) {
+    grid-template-columns: 4rem minmax(0, 1fr) auto;
+    grid-template-areas:
+      "thumb info remove"
+      "controls controls total";
+  }
+}
+
+// An icon button in the theme's primary colour (the edit pencil).
+.icon-primary {
+  --mat-icon-button-icon-color: var(--mat-sys-primary);
+}
+
+// A destructive action (delete, clear): a button in the theme's error colour. Material 3 has no "warn" colour on
+// its buttons, so this sets the button's own colour tokens.
+.danger {
+  --mat-button-filled-container-color: var(--mat-sys-error);
+  --mat-button-filled-label-text-color: var(--mat-sys-on-error);
+  --mat-button-tonal-container-color: var(--mat-sys-error-container);
+  --mat-button-tonal-label-text-color: var(--mat-sys-on-error-container);
+  --mat-button-outlined-label-text-color: var(--mat-sys-error);
+  --mat-button-text-label-text-color: var(--mat-sys-error);
+  --mat-icon-button-icon-color: var(--mat-sys-error);
+}
+
+// A quiet scrollbar that follows the theme.
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--mat-sys-outline) transparent;
 }
 
 // Material Icons: the font file is bundled from @fontsource/material-icons (it used to come from Google's stylesheet);

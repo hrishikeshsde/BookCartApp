@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy } from "@angular/core";
+import { ChangeDetectionStrategy, Component } from "@angular/core";
 import { RouterOutlet } from "@angular/router";
 import { NavBarComponent } from "./components/nav-bar/nav-bar.component";
 
@@ -10,4 +10,10 @@ import { NavBarComponent } from "./components/nav-bar/nav-bar.component";
     changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [NavBarComponent, RouterOutlet]
 })
-export class AppComponent {}
+export class AppComponent {
+  /** The address bar fragment (#main) would break under <base href="/">, so the link focuses the page itself. */
+  protected skipToContent(event: Event) {
+    event.preventDefault();
+    document.getElementById("main")?.focus();
+  }
+}

@@ -1,113 +1,153 @@
-<mat-toolbar color="primary" class="mat-elevation-z4">
-  <mat-toolbar-row class="justify-content-between">
-    <div class="brand-title">
-      <button mat-flat-button color="primary" [routerLink]="['/']">
-        <mat-icon>book</mat-icon> Book Cart
-      </button>
+<ng-template #searchBox>
+  <app-search
+    [books]="books()"
+    [searchText]="searchText()"
+    (searched)="searchFor($event)"
+    (cleared)="showAllBooks()"
+  ></app-search>
+</ng-template>
+
+@let state = userState();
+<mat-toolbar>
+  <mat-toolbar-row class="gap-2">
+    <a
+      matButton="text"
+      class="brand"
+      [routerLink]="['/']"
+      aria-label="Book Cart, home"
+    >
+      <mat-icon>book</mat-icon> Book Cart
+    </a>
+
+    @if (!isHandset()) {
+    <div class="flex flex-1 justify-center px-4">
+      <ng-container *ngTemplateOutlet="searchBox"></ng-container>
     </div>
-    <div>
-      <app-search
-        [books]="books()"
-        [searchText]="searchText()"
-        (searched)="searchFor($event)"
-        (cleared)="showAllBooks()"
-      ></app-search>
-    </div>
-    <div class="d-flex align-items-center">
-      @if (userState(); as userState) { @if (userState.isAuthenticated) {
-      <button
-        mat-icon-button
-        [routerLinkActive]="['link-active']"
-        [routerLink]="['/wishlist']"
-      >
-        <mat-icon
-          matBadge="{{ userState.wishlistItemcount }}"
-          matBadgeColor="warn"
-          aria-hidden="false"
-          >favorite</mat-icon
-        >
-      </button>
-      }
+    } @else {
+    <span class="flex-1"></span>
+    }
 
-      <button
-        mat-icon-button
-        [routerLinkActive]="['link-active']"
-        [routerLink]="['/shopping-cart']"
-      >
-        <mat-icon
-          matBadge="{{ userState.cartItemCount }}"
-          matBadgeColor="warn"
-          aria-hidden="false"
-          >shopping_cart</mat-icon
-        >
-      </button>
-
-      @if (!userState.isAuthenticated) {
-      <button
-        mat-flat-button
-        color="primary"
-        [routerLinkActive]="['link-active']"
-        [routerLink]="['/login']"
-        matTooltip="Login"
-      >
-        Login
-      </button>
-      } @if (userState.user?.userTypeName === 'Admin') {
-      <button
-        mat-flat-button
-        color="primary"
-        [routerLink]="['/admin/books']"
-        matTooltip="Admin panel"
-      >
-        Admin Panel
-      </button>
-      } @if (userState.isAuthenticated) {
-      <a mat-flat-button color="primary" [matMenuTriggerFor]="menu">
-        <mat-icon>account_circle</mat-icon>
-        <span> {{ userState.user?.username }}</span>
-        <mat-icon>arrow_drop_down</mat-icon>
-      </a>
-      <mat-menu #menu="matMenu">
-        <button mat-menu-item [routerLink]="['/myorders']">My Orders</button>
-        <button mat-menu-item (click)="logout()">Logout</button>
-      </mat-menu>
-      }}
-
-      <!-- The API reference only exists in Development builds of the backend. -->
-      @if (showApiDocs) {
+    <nav class="flex items-center gap-1" aria-label="Main">
+      @if (state.isAuthenticated) {
       <a
-        mat-flat-button
-        color="primary"
+        matIconButton
+        [routerLink]="['/wishlist']"
+        routerLinkActive="link-active"
+        [matBadge]="state.wishlistItemcount"
+        [matBadgeHidden]="state.wishlistItemcount === 0"
+        [attr.aria-label]="'Wishlist, ' + state.wishlistItemcount + ' books'"
+      >
+        <mat-icon>favorite</mat-icon>
+      </a>
+      }
+      <a
+        matIconButton
+        [routerLink]="['/shopping-cart']"
+        routerLinkActive="link-active"
+        [matBadge]="state.cartItemCount"
+        [matBadgeHidden]="state.cartItemCount === 0"
+        [attr.aria-label]="'Shopping cart, ' + state.cartItemCount + ' items'"
+      >
+        <mat-icon>shopping_cart</mat-icon>
+      </a>
+
+      @if (isHandset()) {
+      <button
+        matIconButton
+        [matMenuTriggerFor]="moreMenu"
+        aria-label="Menu"
+      >
+        <mat-icon>menu</mat-icon>
+      </button>
+      } @else { @if (!state.isAuthenticated) {
+      <a matButton="text" [routerLink]="['/login']" routerLinkActive="link-active"
+        >Login</a
+      >
+      } @if (state.isAdmin) {
+      <a matButton="text" [routerLink]="['/admin/books']">Admin Panel</a>
+      } @if (state.isAuthenticated) {
+      <button matButton="text" [matMenuTriggerFor]="accountMenu">
+        <mat-icon>account_circle</mat-icon>
+        <span>{{ state.user?.username }}</span>
+        <mat-icon iconPositionEnd>arrow_drop_down</mat-icon>
+      </button>
+      } @if (showApiDocs) {
+      <!-- The API reference only exists in Development builds of the backend. -->
+      <a
+        matButton="text"
         href="/scalar/v1"
         target="_blank"
         rel="noopener noreferrer"
-        matTooltip="API details"
+        >API docs</a
       >
-        API docs
-      </a>
       }
-
-      <a
-        mat-flat-button
-        color="primary"
-        href="https://github.com/hrishikeshsde"
-        target="_blank"
-        rel="noopener noreferrer"
-        matTooltip="GitHub"
-        ><svg
-          class="github-icon"
-          viewBox="0 0 16 16"
-          width="16"
-          height="16"
-          fill="currentColor"
-          aria-hidden="true"
-        >
-          <path
-            d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
-          />
-        </svg>
-        GitHub
-      </a>
-    </div>
+      <ng-container *ngTemplateOutlet="gitHubLink"></ng-container>
+      }
+    </nav>
   </mat-toolbar-row>
+
+  @if (isHandset()) {
+  <mat-toolbar-row class="search-row">
+    <ng-container *ngTemplateOutlet="searchBox"></ng-container>
+  </mat-toolbar-row>
+  }
 </mat-toolbar>
+
+<ng-template #gitHubLink>
+  <a
+    matButton="text"
+    href="https://github.com/hrishikeshsde"
+    target="_blank"
+    rel="noopener noreferrer"
+  >
+    <svg
+      class="github-icon"
+      viewBox="0 0 16 16"
+      width="16"
+      height="16"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path
+        d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
+      />
+    </svg>
+    GitHub
+  </a>
+</ng-template>
+
+<!-- Signed in, wide screens: the account menu. -->
+<mat-menu #accountMenu="matMenu">
+  <a mat-menu-item [routerLink]="['/myorders']">My Orders</a>
+  <button mat-menu-item (click)="logout()">Logout</button>
+</mat-menu>
+
+<!-- Narrow screens: everything the wide layout shows as links. -->
+<mat-menu #moreMenu="matMenu">
+  @if (state.isAuthenticated) {
+  <div class="menu-heading" role="presentation">
+    Signed in as {{ state.user?.username }}
+  </div>
+  <a mat-menu-item [routerLink]="['/myorders']">My Orders</a>
+  } @else {
+  <a mat-menu-item [routerLink]="['/login']">Login</a>
+  <a mat-menu-item [routerLink]="['/register']">Register</a>
+  } @if (state.isAdmin) {
+  <a mat-menu-item [routerLink]="['/admin/books']">Admin Panel</a>
+  } @if (showApiDocs) {
+  <a mat-menu-item href="/scalar/v1" target="_blank" rel="noopener noreferrer"
+    >API docs</a
+  >
+  }
+  <a
+    mat-menu-item
+    href="https://github.com/hrishikeshsde"
+    target="_blank"
+    rel="noopener noreferrer"
+    >GitHub</a
+  >
+  @if (state.isAuthenticated) {
+  <mat-divider></mat-divider>
+  <button mat-menu-item (click)="logout()">Logout</button>
+  }
+</mat-menu>

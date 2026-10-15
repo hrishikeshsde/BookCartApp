@@ -1,0 +1,19 @@
+// The Material 3 theme: one set of --mat-sys-* design tokens (colours, typography, density, shape, elevation) that
+// every Material component and every style in this app reads. `color-scheme: light dark` follows the visitor's system
+// setting, so there is no theme switch to maintain. Change the look by changing the palettes here.
+@use "@angular/material" as mat;
+
+html {
+  color-scheme: light dark;
+  @include mat.theme(
+    (
+      color: (
+        theme-type: color-scheme,
+        primary: mat.$azure-palette,
+        tertiary: mat.$rose-palette,
+      ),
+      typography: Roboto,
+      density: 0,
+    )
+  );
+}

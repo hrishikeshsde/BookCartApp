@@ -4,8 +4,7 @@ import {
   Component,
   input,
 } from "@angular/core";
-import { MatDivider } from "@angular/material/divider";
-import { MatListItem, MatListModule } from "@angular/material/list";
+import { MatListItem, MatNavList } from "@angular/material/list";
 import { RouterLink } from "@angular/router";
 import { Categories } from "src/app/models/categories";
 
@@ -15,7 +14,7 @@ import { Categories } from "src/app/models/categories";
   templateUrl: "./book-filter.component.html",
   styleUrls: ["./book-filter.component.scss"],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatListModule, MatListItem, RouterLink, MatDivider, LowerCasePipe],
+  imports: [MatNavList, MatListItem, RouterLink, LowerCasePipe],
 })
 export class BookFilterComponent {
   /** The selected category, in lower case; empty for "All Categories". */

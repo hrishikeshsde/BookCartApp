@@ -6,7 +6,7 @@ import {
   ReactiveFormsModule,
   Validators,
 } from "@angular/forms";
-import { MatButton } from "@angular/material/button";
+import { MatButton, MatIconButton } from "@angular/material/button";
 import {
   MatCard,
   MatCardActions,
@@ -38,6 +38,7 @@ import { RegisterStore } from "src/app/state/register/register.store";
         MatCardHeader,
         MatCardTitle,
         MatButton,
+        MatIconButton,
         RouterLink,
         MatCardContent,
         ReactiveFormsModule,

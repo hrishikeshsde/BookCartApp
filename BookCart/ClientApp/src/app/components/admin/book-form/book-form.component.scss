@@ -1,16 +1,17 @@
 .preview-image {
-  max-height: 350px;
-  max-width: 200px;
-  border: 2px dashed #ababab;
-}
+  display: block;
+  width: 100%;
+  max-width: 12.5rem;
+  max-height: 22rem;
+  object-fit: cover;
+  border: 2px dashed var(--mat-sys-outline);
+  border-radius: 0.5rem;
 
-input[type="file"] {
-  display: none;
-}
-
-.custom-file-upload {
-  cursor: pointer;
-  color: #ffffff;
-  background-color: #00a7a7;
-  border-radius: 4px;
+  &.empty {
+    display: grid;
+    place-items: center;
+    aspect-ratio: 200 / 260;
+    color: var(--mat-sys-on-surface-variant);
+    text-align: center;
+  }
 }

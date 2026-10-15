@@ -1,16 +1,16 @@
 @if (orderTableData(); as orderTableData) {
-<mat-card class="my-4">
-  <mat-card-header class="custom-card-header mat-elevation-z2">
-    <mat-card-title class="mat-h1">My Orders </mat-card-title>
+<mat-card class="my-6">
+  <mat-card-header class="custom-card-header">
+    <mat-card-title><h1 class="card-heading">My Orders</h1></mat-card-title>
   </mat-card-header>
   @if (orderTableData.dataSource.data.length > 0) {
   <div>
     <mat-card-content>
-      <mat-form-field class="w-100" appearance="outline">
+      <mat-form-field class="w-full" appearance="outline">
         <mat-label>Search</mat-label>
         <input matInput (keyup)="applyFilter($event)" placeholder="Search" />
       </mat-form-field>
-      <div table-container class="mat-elevation-z2">
+      <div class="overflow-x-auto rounded-lg shadow-level-1">
         <table
           mat-table
           [dataSource]="orderTableData.dataSource"
@@ -41,9 +41,9 @@
                 [class.expanded]="element === expandedElement()"
               >
                 <div class="example-element-detail-inner">
-                <mat-card class="w-100">
+                <mat-card class="w-full">
                   <mat-card-content>
-                    <table class="table mat-elevation-z2 details-table">
+                    <table class="details-table">
                       <thead>
                         <tr>
                           <th>Title</th>
@@ -89,8 +89,12 @@
             mat-row
             *matRowDef="let element; columns: displayedColumns"
             class="example-element-row"
+            tabindex="0"
+            [attr.aria-expanded]="expandedElement() === element"
             [class.example-expanded-row]="expandedElement() === element"
             (click)="toggleOrder(element)"
+            (keydown.enter)="toggleOrder(element)"
+            (keydown.space)="toggleOrder(element); $event.preventDefault()"
           ></tr>
           <tr
             mat-row
@@ -106,7 +110,7 @@
     </mat-card-content>
   </div>
   } @else { @if (orderTableData.loading) {
-  <div class="d-flex align-items-center justify-content-center">
+  <div class="flex items-center justify-center">
     <mat-spinner></mat-spinner>
   </div>
   } @else {
@@ -118,8 +122,7 @@
     </mat-card-header>
     <mat-card-content>
       <button
-        mat-raised-button
-        color="primary"
+        matButton="filled"
         [routerLink]="['/']"
         class="mt-2"
       >

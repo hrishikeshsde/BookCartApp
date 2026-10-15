@@ -21,7 +21,7 @@ import {
 import { MatIcon } from "@angular/material/icon";
 import { MatInput } from "@angular/material/input";
 import { RouterLink } from "@angular/router";
-import { MatButton } from "@angular/material/button";
+import { MatButton, MatIconButton } from "@angular/material/button";
 import {
   MatCard,
   MatCardActions,
@@ -44,6 +44,7 @@ import { AuthStore } from "src/app/state/auth/auth.store";
         MatCardHeader,
         MatCardTitle,
         MatButton,
+        MatIconButton,
         RouterLink,
         MatCardSubtitle,
         MatError,

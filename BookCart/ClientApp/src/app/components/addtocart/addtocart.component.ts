@@ -17,5 +17,7 @@ import { MatIcon } from "@angular/material/icon";
 })
 export class AddtocartComponent {
   readonly bookId = input.required<number>();
+  /** The book's title, so a screen reader hears which book "Add to Cart" is for. */
+  readonly bookTitle = input("");
   readonly add = output<number>();
 }

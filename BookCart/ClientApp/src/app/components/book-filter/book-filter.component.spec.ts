@@ -9,7 +9,7 @@ const categories = [
 
 describe("BookFilterComponent", () => {
   let fixture: ComponentFixture<BookFilterComponent>;
-  const items = () => Array.from((fixture.nativeElement as HTMLElement).querySelectorAll("mat-list-item"));
+  const items = () => Array.from((fixture.nativeElement as HTMLElement).querySelectorAll("a"));
 
   beforeEach(() => {
     TestBed.configureTestingModule({ imports: [BookFilterComponent], providers: [provideRouter([])] });
@@ -22,16 +22,20 @@ describe("BookFilterComponent", () => {
     expect(items().map((i) => i.textContent?.trim())).toEqual(["All Categories", "Fiction", "Biography"]);
   });
 
-  it("marks All Categories when no category is chosen", () => {
-    expect(items()[0].classList).toContain("active-category");
-    expect(items()[1].classList).not.toContain("active-category");
+  it("the categories are links (a keyboard can reach them)", () => {
+    expect(items().map((i) => i.getAttribute("href"))).toEqual(["/", "/filter?category=fiction", "/filter?category=biography"]);
   });
 
-  it("marks the chosen category (the address carries it in lower case)", () => {
+  it("marks All Categories as the current page when no category is chosen", () => {
+    expect(items()[0].getAttribute("aria-current")).toBe("page");
+    expect(items()[1].getAttribute("aria-current")).toBeNull();
+  });
+
+  it("marks the chosen category as the current page (the address carries it in lower case)", () => {
     fixture.componentRef.setInput("category", "biography");
     fixture.detectChanges();
 
-    expect(items()[0].classList).not.toContain("active-category");
-    expect(items()[2].classList).toContain("active-category");
+    expect(items()[0].getAttribute("aria-current")).toBeNull();
+    expect(items()[2].getAttribute("aria-current")).toBe("page");
   });
 });

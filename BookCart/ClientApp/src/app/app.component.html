@@ -1,4 +1,7 @@
-<app-nav-bar class="mat-elevation-z6"></app-nav-bar>
-<div class="container">
+<a class="skip-link" href="#main" (click)="skipToContent($event)">Skip to content</a>
+<header>
+  <app-nav-bar></app-nav-bar>
+</header>
+<main id="main" class="page py-6" tabindex="-1">
   <router-outlet></router-outlet>
-</div>
+</main>

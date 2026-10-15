@@ -1,38 +1,42 @@
 <mat-card
-  class="book-card mat-elevation-z2"
+  class="book-card h-full w-full"
   [class.on-book-card-hover]="isActive()"
   (mouseover)="isActive.set(true)"
   (mouseout)="isActive.set(false)"
 >
+  <!-- The title below is the link for keyboards and screen readers; this one only makes the picture clickable. -->
   <a
+    class="cover"
     [routerLink]="['/books/details/', book().bookId]"
-    matTooltip="{{ book().title }}"
-    aria-label="Book title"
-    ><img
-      class="preview-image"
-      mat-card-image
-      src="/Upload/{{ book().coverFileName }}"
-      alt="Book cover image"
+    tabindex="-1"
+    aria-hidden="true"
+  >
+    <img
+      [ngSrc]="'/Upload/' + book().coverFileName"
+      fill
+      sizes="(min-width: 48rem) 11rem, 45vw"
+      [priority]="priority()"
+      [alt]="book().title + ' cover'"
     />
   </a>
-  <mat-card-content>
-    @if (signedIn()) {
-    <div class="favourite mat-elevation-z8">
-      <app-addtowishlist
-        [bookId]="book().bookId"
-        [wishlisted]="wishlisted()"
-        (toggle)="toggleWishlist.emit($event)"
-      ></app-addtowishlist>
-    </div>
-    }
-    <div class="card-title my-2">
-      <a [routerLink]="['/books/details/', book().bookId]">
-        <strong>{{ book().title }}</strong>
-      </a>
-    </div>
-    <p>{{ book().price | currency : "INR" }}</p>
+  @if (signedIn()) {
+  <div class="favourite">
+    <app-addtowishlist
+      [bookId]="book().bookId"
+      [bookTitle]="book().title"
+      [wishlisted]="wishlisted()"
+      (toggle)="toggleWishlist.emit($event)"
+    ></app-addtowishlist>
+  </div>
+  }
+  <mat-card-content class="body">
+    <h2 class="title">
+      <a [routerLink]="['/books/details/', book().bookId]">{{ book().title }}</a>
+    </h2>
+    <p class="price">{{ book().price | currency : "INR" }}</p>
     <app-addtocart
       [bookId]="book().bookId"
+      [bookTitle]="book().title"
       (add)="addToCart.emit($event)"
     ></app-addtocart>
   </mat-card-content>

@@ -77,7 +77,7 @@ async function badges(page) {
 async function logoutIfNeeded(page) {
   const has = await page.evaluate(() => !!localStorage.getItem('authToken'));
   if (!has) return;
-  await clickText(page, 'a[mat-flat-button]', 'account_circle');
+  await clickText(page, 'mat-toolbar button', 'account_circle');
   await page.waitForSelector('button[mat-menu-item]');
   await clickText(page, 'button[mat-menu-item]', 'Logout');
   await waitFn(page, () => location.pathname === '/login');
@@ -112,7 +112,7 @@ async function uiLogin(page, u) {
     if (!fonts.includes('Roboto')) throw new Error('Roboto not loaded: ' + fonts.join(','));
   });
   await step('guest adds a book to the cart (badge 1)', async () => {
-    firstTitle = await page.$eval('app-book-card .card-title strong', (e) => e.textContent.trim());
+    firstTitle = await page.$eval('app-book-card .title a', (e) => e.textContent.trim());
     await page.click('app-addtocart button');
     await waitFn(page, () => [...document.querySelectorAll('.mat-badge-content')].some((e) => e.textContent.trim() === '1'));
   });
@@ -124,7 +124,7 @@ async function uiLogin(page, u) {
     await waitFn(page, () => document.querySelectorAll('app-book-card').length === 1);
   });
   await step('book details page opens from a card', async () => {
-    await page.click('app-book-card .card-title a');
+    await page.click('app-book-card .title a');
     await waitFn(page, () => location.pathname.startsWith('/books/details/'));
     await waitFn(page, () => document.body.innerText.includes('Smoke Book 2'));
   });
@@ -161,7 +161,7 @@ async function uiLogin(page, u) {
   });
   await step('shopping cart page shows the item', async () => {
     await page.goto(WEB + '/shopping-cart', { waitUntil: 'networkidle2' });
-    await waitFn(page, (t) => document.querySelectorAll('table tbody tr').length >= 1 && document.body.innerText.includes(t), firstTitle);
+    await waitFn(page, (t) => document.querySelectorAll('li.item-row').length >= 1 && document.body.innerText.includes(t), firstTitle);
   });
   await step('checkout places an order and My Orders lists it', async () => {
     await page.goto(WEB + '/checkout', { waitUntil: 'networkidle2' });
@@ -235,7 +235,7 @@ async function uiLogin(page, u) {
   }, { known: true });
   await step('token removed behind the app: the next call goes to login without a page reload', async () => {
     await page.evaluate(() => { window.__marker = 'same-document'; localStorage.removeItem('authToken'); });
-    await clickText(page, 'mat-toolbar button', 'favorite');
+    await clickText(page, 'mat-toolbar a', 'favorite');
     await waitFn(page, () => location.pathname === '/login' && location.search.includes('returnUrl=%2Fwishlist'));
     if ((await page.evaluate(() => window.__marker)) !== 'same-document') throw new Error('the page was reloaded');
   }, { known: true });

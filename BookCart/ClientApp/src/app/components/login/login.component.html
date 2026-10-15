@@ -1,12 +1,9 @@
-<div class="d-flex justify-content-center">
-  <mat-card class="my-4 w-50">
-    <mat-card-header
-      class="mat-elevation-z2 custom-card-header justify-content-between"
-    >
-      <mat-card-title class="mat-h1"> Login </mat-card-title>
+<mat-card class="mx-auto my-6 w-full max-w-xl">
+    <mat-card-header class="custom-card-header flex-wrap justify-between gap-2">
+      <mat-card-title><h1 class="card-heading">Login</h1></mat-card-title>
       <div>
-        <span class="mat-h4">New User? </span>
-        <button mat-raised-button [routerLink]="['/register']">Register</button>
+        <span class="card-subheading">New User? </span>
+        <button matButton="tonal" [routerLink]="['/register']">Register</button>
       </div>
     </mat-card-header>
     @if (error(); as error) {
@@ -26,9 +23,9 @@
     </mat-card-header>
       }
     }
-    <mat-card-content class="p-3">
+    <mat-card-content class="p-4">
       <form [formGroup]="loginForm" (ngSubmit)="login()" novalidate>
-        <mat-form-field class="w-100 mt-1" appearance="outline">
+        <mat-form-field class="w-full mt-1" appearance="outline">
           <mat-label>Username</mat-label>
           <input
             matInput
@@ -42,7 +39,7 @@
           }
         </mat-form-field>
 
-        <mat-form-field class="w-100 mt-1" appearance="outline">
+        <mat-form-field class="w-full mt-1" appearance="outline">
           <mat-label>Password</mat-label>
           <input
             matInput
@@ -51,18 +48,24 @@
             [type]="showPassword ? 'text' : 'password'"
             required
           />
-          <mat-icon matSuffix (click)="showPassword = !showPassword">{{
-            showPassword ? "visibility" : "visibility_off"
-          }}</mat-icon>
+          <button
+            matIconButton
+            matSuffix
+            type="button"
+            [attr.aria-label]="showPassword ? 'Hide password' : 'Show password'"
+            [attr.aria-pressed]="showPassword"
+            (click)="showPassword = !showPassword"
+          >
+            <mat-icon>{{ showPassword ? "visibility" : "visibility_off" }}</mat-icon>
+          </button>
           @if ( loginFormControl.password.touched &&
           loginFormControl.password.errors?.['required'] ) {
           <mat-error>Password is required</mat-error>
           }
         </mat-form-field>
         <mat-card-actions align="end" class="p-0">
-          <button mat-raised-button color="primary">Login</button>
+          <button matButton="filled">Login</button>
         </mat-card-actions>
       </form>
     </mat-card-content>
-  </mat-card>
-</div>
+</mat-card>

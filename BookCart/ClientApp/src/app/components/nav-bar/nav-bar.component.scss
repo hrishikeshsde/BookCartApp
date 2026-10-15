@@ -1,9 +1,31 @@
-.spacer {
-  flex-grow: 1;
+// The toolbar is sticky (see the header in app.component.scss), so it takes its own space instead of the page padding a
+// fixed bar needs.
+:host {
+  display: block;
 }
 
-a {
-  color: #ffffff;
+// The toolbar is the primary colour; what sits on it (links, icons, badges) takes the matching "on" colours.
+mat-toolbar {
+  --mat-toolbar-container-background-color: var(--mat-sys-primary);
+  --mat-toolbar-container-text-color: var(--mat-sys-on-primary);
+  --mat-button-text-label-text-color: var(--mat-sys-on-primary);
+  --mat-button-text-state-layer-color: var(--mat-sys-on-primary);
+  --mat-button-text-ripple-color: color-mix(in srgb, var(--mat-sys-on-primary) 12%, transparent);
+  --mat-icon-button-icon-color: var(--mat-sys-on-primary);
+  --mat-icon-button-state-layer-color: var(--mat-sys-on-primary);
+  --mat-badge-background-color: var(--mat-sys-error);
+  --mat-badge-text-color: var(--mat-sys-on-error);
+}
+
+.brand {
+  font-size: 1.125rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+// The page the visitor is on.
+.link-active {
+  background: color-mix(in srgb, var(--mat-sys-on-primary) 16%, transparent);
 }
 
 .github-icon {
@@ -11,16 +33,19 @@ a {
   margin-right: 4px;
 }
 
-.brand-title {
-  button {
-    font-size: 18px;
-  }
+// The search box on its own row (narrow screens): a little air and the toolbar's own height.
+.search-row {
+  height: auto;
+  padding-block: 0 0.75rem;
 }
 
-mat-toolbar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 999;
+.menu-heading {
+  padding: 0.5rem 1rem;
+  font: var(--mat-sys-label-medium);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+// On its own row the search box takes the whole width.
+.search-row app-search {
+  max-width: none;
 }

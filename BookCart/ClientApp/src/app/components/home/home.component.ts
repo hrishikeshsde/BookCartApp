@@ -4,8 +4,10 @@ import {
   computed,
   inject,
   input,
+  linkedSignal,
   signal,
 } from "@angular/core";
+import { MatPaginator, PageEvent } from "@angular/material/paginator";
 import { MatProgressSpinner } from "@angular/material/progress-spinner";
 import { WishlistToggle } from "src/app/models/wishlist-toggle";
 import { BooksStore } from "src/app/state/books/books.store";
@@ -28,6 +30,7 @@ import { PriceFilterComponent } from "../price-filter/price-filter.component";
     PriceFilterComponent,
     BookCardComponent,
     MatProgressSpinner,
+    MatPaginator,
   ],
 })
 export class HomeComponent {
@@ -69,6 +72,19 @@ export class HomeComponent {
     );
   });
 
+  /** How many books a page of the grid holds (the paginator offers these). */
+  protected readonly pageSizes = [12, 24, 48];
+  protected readonly pageSize = signal(this.pageSizes[0]);
+  /** Back on the first page whenever the filters change what is listed. */
+  protected readonly pageIndex = linkedSignal<number, number>({
+    source: () => this.visibleBooks().length,
+    computation: () => 0,
+  });
+  protected readonly pagedBooks = computed(() => {
+    const start = this.pageIndex() * this.pageSize();
+    return this.visibleBooks().slice(start, start + this.pageSize());
+  });
+
   /** True while the first load of the catalogue is under way (a reload of books already shown does not blank the page). */
   protected readonly firstLoad = computed(
     () =>
@@ -79,6 +95,11 @@ export class HomeComponent {
   constructor() {
     this.booksStore.load();
     this.categoriesStore.load();
+  }
+
+  protected onPage({ pageIndex, pageSize }: PageEvent) {
+    this.pageSize.set(pageSize);
+    this.pageIndex.set(pageIndex);
   }
 
   protected addToCart(bookId: number) {

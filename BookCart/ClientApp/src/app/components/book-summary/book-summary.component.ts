@@ -6,6 +6,7 @@ import {
 } from "@angular/core";
 import { MatButton } from "@angular/material/button";
 import { MatCard, MatCardContent } from "@angular/material/card";
+import { MatIcon } from "@angular/material/icon";
 import { MatProgressSpinner } from "@angular/material/progress-spinner";
 
 /**
@@ -16,7 +17,7 @@ import { MatProgressSpinner } from "@angular/material/progress-spinner";
   selector: "app-book-summary",
   templateUrl: "./book-summary.component.html",
   styleUrls: ["./book-summary.component.scss"],
-  imports: [MatCard, MatCardContent, MatButton, MatProgressSpinner],
+  imports: [MatCard, MatCardContent, MatButton, MatIcon, MatProgressSpinner],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class BookSummaryComponent {

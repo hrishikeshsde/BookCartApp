@@ -30,8 +30,12 @@
                 "bundleName": "appStyle"
               },
               {
-                "input": "@angular/material/prebuilt-themes/indigo-pink.css",
+                "input": "src/styles/theme.scss",
                 "bundleName": "materialStyle"
+              },
+              {
+                "input": "src/styles/tailwind.css",
+                "bundleName": "tailwindStyle"
               },
               "@fontsource/roboto/300.css",
               "@fontsource/roboto/400.css",
@@ -48,8 +52,8 @@
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "1mb",
-                  "maximumError": "2mb"
+                  "maximumWarning": "950kb",
+                  "maximumError": "1.2mb"
                 },
                 {
                   "type": "anyComponentStyle",
@@ -70,7 +74,8 @@
               "optimization": false,
               "extractLicenses": false,
               "styles": [
-                "@angular/material/prebuilt-themes/indigo-pink.css",
+                "src/styles/theme.scss",
+                "src/styles/tailwind.css",
                 "@fontsource/roboto/300.css",
                 "@fontsource/roboto/400.css",
                 "@fontsource/roboto/500.css",

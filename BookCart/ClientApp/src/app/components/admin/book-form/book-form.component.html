@@ -1,19 +1,17 @@
-<mat-card class="my-4">
-  <mat-card-header class="custom-card-header mat-elevation-z2">
-    <mat-card-title class="mat-h1"
-      >{{ formTitle() }} Book
-    </mat-card-title>
+<mat-card class="my-6">
+  <mat-card-header class="custom-card-header">
+    <mat-card-title><h1 class="card-heading">{{ formTitle() }} Book</h1></mat-card-title>
   </mat-card-header>
-  <mat-card-content class="p-3">
-    <div class="row">
-      <div class="col-md-8">
+  <mat-card-content class="p-4">
+    <div class="grid gap-6 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div>
         <mat-card-content>
           <form
             enctype="multipart/form-data"
             [formGroup]="bookForm"
             (ngSubmit)="onFormSubmit()"
           >
-            <mat-form-field class="w-100" appearance="outline">
+            <mat-form-field class="w-full" appearance="outline">
               <mat-label>Title</mat-label>
               <input
                 matInput
@@ -27,7 +25,7 @@
               }
             </mat-form-field>
 
-            <mat-form-field class="w-100" appearance="outline">
+            <mat-form-field class="w-full" appearance="outline">
               <mat-label>Author</mat-label>
               <input
                 matInput
@@ -41,7 +39,7 @@
               }
             </mat-form-field>
 
-            <mat-form-field class="w-100" appearance="outline">
+            <mat-form-field class="w-full" appearance="outline">
               <mat-label>Category</mat-label>
               <mat-select
                 placeholder="Category"
@@ -60,7 +58,7 @@
               }
             </mat-form-field>
 
-            <mat-form-field class="w-100" appearance="outline">
+            <mat-form-field class="w-full" appearance="outline">
               <mat-label>Price</mat-label>
               <span matTextPrefix>&#8377; &nbsp;</span>
               <input
@@ -80,13 +78,12 @@
               }
             </mat-form-field>
             <mat-card-actions align="end" class="p-0">
-              <button type="submit" mat-raised-button color="primary">
+              <button matButton="filled" type="submit">
                 Save
               </button>
               <button
+                matButton="outlined"
                 type="button"
-                mat-raised-button
-                color="warn"
                 class="ms-2"
                 (click)="cancel.emit()"
               >
@@ -96,30 +93,27 @@
           </form>
         </mat-card-content>
       </div>
-      <div
-        class="col-md-4 d-flex flex-column align-items-center justify-content-center"
-      >
-        <mat-card-content class="d-flex flex-column">
-          <img
-            class="preview-image p-2"
-            mat-card-image
-            src="{{ coverImagePath() }}"
-            alt="Upload a poster image"
-          />
-          <div class="my-2">
-            <label
-              for="file-upload"
-              class="custom-file-upload mat-elevation-z4 py-2 px-3 d-flex align-items-center"
-            >
-              <mat-icon class="mx-2">cloud_upload</mat-icon> Upload poster
-            </label>
-            <input
-              id="file-upload"
-              type="file"
-              (change)="uploadImage($event)"
-            />
-          </div>
-        </mat-card-content>
+      <div class="flex flex-col items-center justify-center gap-4">
+        @if (coverImagePath()) {
+        <img
+          class="preview-image"
+          [src]="coverImagePath()"
+          alt="The book's cover"
+        />
+        } @else {
+        <div class="preview-image empty">No cover chosen</div>
+        }
+        <button matButton="tonal" type="button" (click)="coverFile.click()">
+          <mat-icon>cloud_upload</mat-icon> Upload poster
+        </button>
+        <input
+          #coverFile
+          type="file"
+          hidden
+          accept=".jpg,.jpeg,.png,.webp"
+          aria-label="Cover image"
+          (change)="uploadImage($event)"
+        />
       </div>
     </div>
   </mat-card-content>

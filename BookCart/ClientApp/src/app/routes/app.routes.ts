@@ -69,6 +69,8 @@ export const APP_ROUTES: Routes = [
   },
   {
     path: "admin/books",
+    // The admin pages are not downloaded in the background: most visitors never open them (SelectivePreloadingStrategy).
+    data: { preload: false },
     loadChildren: () => import("./admin.routes").then((m) => m.ADMIN_ROUTES),
     canMatch: [adminGuard],
     title: "Admin | Books",

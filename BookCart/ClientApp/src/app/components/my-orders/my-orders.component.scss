@@ -12,8 +12,13 @@ tr.example-detail-row {
 }
 
 tr.example-element-row:not(.example-expanded-row):hover {
-  background: #e2e1e2;
+  background: var(--mat-sys-surface-container-high);
   cursor: pointer;
+}
+
+tr.example-element-row:focus-visible {
+  outline: 2px solid var(--mat-sys-primary);
+  outline-offset: -2px;
 }
 
 .example-element-row td {
@@ -55,9 +60,9 @@ tr.example-element-row:not(.example-expanded-row):hover {
   th,
   td {
     border-top: 0;
-    border-bottom: 1px solid #dee2e6;
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
     width: 20%;
-    padding: 20px;
+    padding: 0.75rem 1rem;
   }
 
   th:nth-child(1),

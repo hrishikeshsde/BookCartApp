@@ -13,7 +13,8 @@ All phases are done on one branch (`modernize/f1-security`, created by the repo 
 | F3 | Upgrade to Angular 22 (and Vitest) | Done |
 | F4 | Signals, smart/dumb components, zoneless | Done |
 | F5 | State management: classic NgRx to SignalStore | Done |
-| F6 to F7 | Styling, SSR | Not started |
+| F6 | Material 3 theme, Tailwind, responsive layout, images, accessibility | Done |
+| F7 | SSR | Not started (optional) |
 
 ## Step 0: baseline
 
@@ -188,7 +189,7 @@ Branch `modernize/f4-signals` (created by the repo owner).
 
 ### F4 follow-ups (what is left over, and where to pick it up)
 
-Status after F5: F4-1 and F4-2 are done in F5 (every component reads signals; the search box text comes from the address). F4-3 is partly done (`my-orders` and `manage-books` have specs now; `book-summary`, `delete-book`, `wishlist` and `page-not-found` still have none). F4-4 was repeated in F5 on the new stores (24 of 24 caught). F4-5 to F4-9 are open. Each row says what to do, so a later session can start without re-deriving it.
+Status after F5: F4-1 and F4-2 are done in F5 (every component reads signals; the search box text comes from the address). F4-3 is partly done (`my-orders` and `manage-books` have specs now; `book-summary`, `delete-book`, `wishlist` and `page-not-found` still have none). F4-4 was repeated in F5 on the new stores (24 of 24 caught). F4-7 was fixed in F6 (the default cover is 8 KB and the dev console no longer warns NG0913); F4-5, F4-6, F4-8 and F4-9 are open. Each row says what to do, so a later session can start without re-deriving it.
 
 | # | Left over | What to do | Belongs to |
 |---|---|---|---|
@@ -255,6 +256,65 @@ Branch `modernize/f5-signalstore` (created by the repo owner). `@ngrx/store`, `@
 | F5-5 | A failed cart, wishlist or orders call records `error()`, but no page shows it (only the interceptor's 403 and 5xx messages show), as before F5. | Show `error()` on the page, or a snackbar from the store. | Optional |
 | F5-6 | Every store is `providedIn: "root"`, so state stays after leaving a page (the similar books, the register status). Nothing needs a clean start today. | Reset in the page that needs one. | Note |
 
+## F6: styling, layout, images, accessibility
+
+Branch `modernize/f6-ui` (created by the repo owner). Bootstrap is uninstalled (so is `ClientApp/.npmrc`, which only existed for its peer dependency; `npm ci --dry-run` is clean without it); `tailwindcss`, `@tailwindcss/postcss` and `postcss` are added as dev dependencies.
+
+**F6.1 Material 3 theme**
+- `src/styles/theme.scss` is the one theme: `mat.theme` with an azure primary and a rose tertiary palette, Roboto, `color-scheme: light dark`. Dark mode follows the system setting and needs no code. It replaces the `indigo-pink.css` prebuilt theme in `angular.json` (build and test).
+- Every colour in the styles is a `--mat-sys-*` token now (the 20 hard-coded colour codes, including `#ff4081`, `#b30000`, `#fafafa`, are gone; a grep finds none). The pink banner of a page card is the tertiary container (`.custom-card-header`), the chosen category is Material's own "activated" state, the wishlist heart is `--mat-sys-error`.
+- Buttons use the Material 3 API: `matButton="filled|tonal|outlined|text"` and `matIconButton`. M3 buttons have no `color="warn"`, so a destructive button is `class="danger"` (it sets the button's colour tokens). Cancel buttons are outlined, buttons that navigate are `<a matButton>`. `mat-elevation-z*` classes became `shadow-level-1..5` (the M3 elevation tokens), `mat-h1`/`mat-h4` became `.card-heading`/`.card-subheading`.
+
+**F6.2 Tailwind v4 instead of Bootstrap**
+- Tailwind is utilities only (`src/styles/tailwind.css`, `.postcssrc.json`), with **no preflight**: its reset restyles buttons, inputs and tables that Material already styles. The few reset rules the app needs (box-sizing, margins, links) are in `src/styles.scss`. The Tailwind theme replaces its palette and shadows with the Material tokens, so `bg-primary`, `text-on-surface` and `shadow-level-2` follow the theme and dark mode.
+- **Bootstrap's spacing scale is not Tailwind's** (Bootstrap `my-4` is 1.5rem, Tailwind `my-4` is 1rem): the class conversion translated the numbers (1, 2 stay; 3 to 4; 4 to 6; 5 to 12) instead of copying them. The `row`/`col-*` grids became CSS grid (`md:grid-cols-...`).
+- **Gotcha:** Tailwind utilities sit in a cascade layer and Material's component CSS is unlayered, so a utility on a Material host loses when Material sets the same property. `mat-card-content` is `display: block` with its own padding, so a `grid` class on it did nothing (the details page showed a stacked layout until the grid moved to a `div` inside). `mat-card-header.custom-card-header` has the element name to beat Material's padding.
+
+**F6.3 Responsive layout**
+- Nav bar: a sticky `header` (no more `padding-top: 60px` for a fixed bar). Below 1024 px (`BreakpointObserver`) the links collapse into a menu button, the search box moves to a row of its own, and the cart (and wishlist) icons stay. The badges sit on the buttons and the buttons are named ("Shopping cart, 5 items").
+- Login, register and checkout are fluid (`w-full max-w-xl mx-auto`, not a fixed half width). The book grids are two columns on a phone and fill the width above it. The side filters stack above the books on a phone.
+- The cart and the wishlist are lists, not tables (a six-column table cannot work at 360 px): picture, title and price, then the controls, which drop under the title on a phone. The admin books table, My Orders and the checkout summary scroll sideways inside their card.
+
+**F6.4 Images**
+- Pictures are `NgOptimizedImage` (`ngSrc` with `fill` inside a box with a fixed aspect ratio, so nothing jumps: CLS is 0), with real `alt` text ("<title> cover"). The first six cards, the first cart and wishlist thumbnail and the details cover are `priority`; the rest load lazily. A test found a real bug here: `priority` must not change while an image exists, so the home grid is keyed by place and the cart and wishlist gate the first row with `@if`.
+- `wwwroot/Upload/Default_image.jpg` was 1205 x 1843 px and 218 KB for a picture drawn about 180 px wide; it is 400 x 612 and 8 KB now (the backend only checks that it is served as a JPEG). Covers that admins upload are still stored full size (F6-3).
+
+**F6.5 Loading and bundle**
+- `SelectivePreloadingStrategy` replaces `PreloadAllModules`: lazy routes load in the background except `data: { preload: false }` (`admin/books`), so visitors do not download the admin pages.
+- `@defer (on viewport)` for the similar books on the details page (the AI summary is a button, nothing to defer).
+- The home grid has a `mat-paginator` (12, 24 or 48 books per page, back to page 1 when a filter changes what is listed). It pages the filtered list in the browser (F6-4).
+- `withFetch()` is explicit in `main.ts` (the XHR the Angular 22 migrations kept is gone). The budgets are 950 kB warning and 1.2 MB error for the initial bundle (the plan's 500 kB is not reachable without SSR; this catches regressions).
+- The Gemini button uses the `auto_awesome` icon instead of an image loaded from `gstatic.com`: the app makes no external request any more (the smoke test checks).
+
+**F6.6 Accessibility**
+- axe-core on ten pages (guest and signed-in), light and dark, 360 and 1280 px: **900 violating nodes before, 0 after.** Before: 619 content outside landmarks, 75 icons without a name, 52 unnamed buttons, 40 pages without a main landmark and 40 without an h1, 35 invalid aria attributes, 27 colour contrast, 8 images without alt, 4 unlabelled inputs.
+- What changed: `header`, `main` and a skip link; one `h1` per page (the page card's title; the home page has a visually hidden one); every icon button names its book or action (a visible label is contained in its accessible name); the category list, the "show password" icons, the wishlist heart and the cover upload are real links and buttons (they were clickable `div`s and `span`s that a keyboard could not reach); My Orders rows are focusable and open with Enter or Space (`aria-expanded`); the search box has a visible focus ring; the price slider has a label; heart and card animations stop under `prefers-reduced-motion`.
+
+**Result**
+| | F5 | F6 |
+|---|---|---|
+| Initial bundle | 997.47 kB raw / 199.33 kB transfer | 900.16 kB raw / 202.47 kB transfer (CSS is 7.9 kB theme + 6.0 kB Tailwind) |
+| Unit tests | 224 | 240 |
+| Smoke test | 25 of 25 | 25 of 25 (no external requests; selectors updated for the new markup) |
+| axe violations | 900 nodes | 0 |
+| Lighthouse, mobile (production build) | not measured | home 73, details 72, login 79 for performance; **accessibility 100, best practices 100, CLS 0** on all three. FCP 3.4 to 3.9 s, LCP 3.8 to 4.5 s, TBT 160 to 260 ms on the simulated slow 4G. |
+
+Screenshots at 360, 768 and 1280 px in light and dark were taken before and after for ten pages and checked by eye (kept outside the repo).
+
+### F6 follow-ups
+
+| # | Left over | What to do | Belongs to |
+|---|---|---|---|
+| F6-1 | There is no Lighthouse baseline from before F6 (F0 never recorded one); only the axe and bundle numbers were captured first. | Nothing now; re-measure after F7 or any large change and keep the numbers. | Note |
+| F6-2 | Performance is 72 to 79: the app is client-rendered (HTML, then JS, then the API, then paint), and the Material Icons font is 126 kB. | F7 (SSR) is the lever. Cheaper: replace the icon font by SVG icons (`MatIconRegistry`) or a subset. | F7, optional |
+| F6-3 | Covers admins upload are stored full size, so the `NgOptimizedImage` pictures cannot be smaller than the file. | Backend: an image resize endpoint or thumbnails at upload, then an image loader with `srcset`. | Backend, optional |
+| F6-4 | The home paginator pages in the browser; the whole catalogue is still fetched once. | Server paging with `GET api/book/search` (page, pageSize, filters) would cut the first load, but changes `BooksStore` and the search suggestions. | Optional |
+| F6-5 | On a phone the category list takes about a screen above the books. | Collapse it into a select or an accordion below 768 px. | Optional |
+| F6-6 | Dark mode follows the system only. | A toggle that sets `color-scheme` on `html`, if wanted. | Optional |
+| F6-7 | The screenshot, axe and Lighthouse tooling is not in the repo (it lives in a scratch folder). | Add `scripts/smoke/shots.js` with `axe-core` and make the smoke test fail on any axe violation. | Cleanup |
+| F6-8 | The admin book form's cover preview is a plain `img` (it shows a local file, which `NgOptimizedImage` does not take). | None. | Note |
+
+
 ## Differences from the plan
 
 | Plan said | Done | Why |
@@ -271,16 +331,23 @@ Branch `modernize/f5-signalstore` (created by the repo owner). `@ngrx/store`, `@
 | F5.3 checkout calls `cart.clear()` afterwards | Calls `cart.load()` | The server already emptied the cart; `clear()` would send a DELETE for nothing |
 | F5.3 books store with `selectedId`, `filters`, `filtered` | Entities, price range and the mutation methods only | The filters come from the route inputs and stay in `home` (F5-3) |
 | F5.4 optional `withDevtools` | Not added | F5-1 |
+| F6.1 tertiary palette `mat.$magenta-palette` | `mat.$rose-palette` | Closer to the pink the app already had |
+| F6.2 `@import "tailwindcss"` (with preflight) | Utilities only, no preflight | The reset restyles Material buttons, inputs and tables |
+| F6.2 spacing classes map to the same numbers (`p-3` to `p-3`) | The numbers are translated | Bootstrap's spacing scale is different from Tailwind's |
+| F6.5 pagination or virtual scroll "after backend B4.5" | A client-side `mat-paginator` (12, 24, 48) | The catalogue is fetched once anyway (F5); server paging is F6-4 |
+| F6.5 `@defer` for `similarbooks` and `book-summary` | `similarbooks` only | The summary is one button, nothing to defer |
+| F6.5 budgets 500 kB warning, 1 MB error | 950 kB warning, 1.2 MB error | The bundle is 900 kB; 500 kB needs SSR or less Material. This catches regressions |
+| F6 verify: Lighthouse before and after | After only, with axe and bundle before and after | No baseline was ever recorded (F6-1) |
 
 ## Open items
 
 | # | Item | Belongs to |
 |---|---|---|
 | 1 | Token transport is still `localStorage` (readable by any script). The plan's target is an HttpOnly cookie, which needs backend work (set the cookie at login, `SameSite=Strict`, antiforgery for state-changing calls); `TokenStorage` and the interceptors are the only places to change. | Backend + F1 follow-up |
-| 2 | The initial bundle is 997 kB, just under the 1 MB budget (it was 1.10 MB before F4 and F5). The budget itself is still to be tightened. | F6 |
+| 2 | Done in F6: the initial bundle is 900 kB (1.10 MB before F4), the budgets are 950 kB and 1.2 MB. | Done |
 | 3 | No specs for `book-summary`, `delete-book`, `wishlist` and `page-not-found` (the rest of F4-3); the mutation check was not repeated on the F4 components (it was run on the F5 stores, F4-4); the smoke test does not fail on console errors (F4-5); the CI test step has not run on GitHub. | F2 follow-up |
-| 4 | `book-summary` still loads the Gemini sparkle image from `gstatic.com`. | F6 |
-| 5 | `withXhr()` (added by the Angular 22 migrations to keep today's behaviour) stays until F6 (`withFetch()`). | F6 |
+| 4 | Done in F6: the Gemini button uses a Material icon; no external request is left. | Done |
+| 5 | Done in F6: HTTP goes through `fetch`. | Done |
 | 6 | Done in F5: F4-1 (no async pipe left) and F4-2 (search text read from the address). | Done |
-| 8 | The F5 follow-ups (F5-1 to F5-6) above. | Optional, F6 |
+| 8 | The F5 follow-ups (F5-1 to F5-6) and the F6 follow-ups (F6-1 to F6-8) above. | Optional |
 | 7 | Smoke test cleanup: drop the `known` flag and `--expect-f1`, add the run helper to the repo (F4-6); Default_image NG0913 (F4-7); small test and form items (F4-8, F4-9). See the F4 follow-ups table. | Cleanup, F6 |

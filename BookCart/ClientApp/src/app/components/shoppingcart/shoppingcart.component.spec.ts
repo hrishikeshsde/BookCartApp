@@ -26,7 +26,7 @@ describe("ShoppingcartComponent", () => {
   });
 
   it("lists every book with the grand total", () => {
-    expect(root().querySelectorAll("table tbody tr").length).toBe(2);
+    expect(root().querySelectorAll("li.item-row").length).toBe(2);
     expect(root().textContent).toContain("Book 1");
     expect(root().textContent).toContain("Book 2");
     expect(root().textContent).toContain("₹400.00"); // 2 x 100 + 1 x 200
@@ -39,6 +39,23 @@ describe("ShoppingcartComponent", () => {
     expect(cart.reduce).toHaveBeenCalledWith(1);
     buttonWithIcon("delete").click();
     expect(cart.remove).toHaveBeenCalledWith(1);
+  });
+
+  it("every button says which book it is for", () => {
+    const labels = Array.from(root().querySelectorAll("li.item-row button")).map((b) => b.getAttribute("aria-label"));
+    expect(labels).toEqual([
+      "One copy fewer of Book 1",
+      "One more copy of Book 1",
+      "Remove Book 1 from the cart",
+      "One copy fewer of Book 2",
+      "One more copy of Book 2",
+      "Remove Book 2 from the cart",
+    ]);
+  });
+
+  it("will not take the last copy off with the minus button (the trash button removes the book)", () => {
+    const minus = root().querySelectorAll("li.item-row")[1].querySelector("button") as HTMLButtonElement;
+    expect(minus.disabled).toBe(true);
   });
 
   it("clear cart empties it", () => {

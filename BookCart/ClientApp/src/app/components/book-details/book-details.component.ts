@@ -1,4 +1,4 @@
-import { CurrencyPipe } from "@angular/common";
+import { CurrencyPipe, NgOptimizedImage } from "@angular/common";
 import {
   ChangeDetectionStrategy,
   Component,
@@ -13,7 +13,6 @@ import {
   MatCard,
   MatCardContent,
   MatCardHeader,
-  MatCardImage,
   MatCardTitle,
 } from "@angular/material/card";
 import { MatProgressSpinner } from "@angular/material/progress-spinner";
@@ -45,7 +44,7 @@ import { SimilarbooksComponent } from "../similarbooks/similarbooks.component";
     MatCardHeader,
     MatCardTitle,
     MatCardContent,
-    MatCardImage,
+    NgOptimizedImage,
     MatProgressSpinner,
     AddtocartComponent,
     AddtowishlistComponent,

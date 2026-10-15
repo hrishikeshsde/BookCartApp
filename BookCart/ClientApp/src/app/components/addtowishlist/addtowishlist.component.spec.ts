@@ -62,8 +62,8 @@ describe("AddtowishlistComponent", () => {
 
   it("is a heart unless it is asked to be a button, and the heart shows the state", () => {
     show({ showButton: false, wishlisted: false });
-    expect(root().querySelector("button")).toBeNull();
-    expect(root().querySelector(".favourite-unselected")).not.toBeNull();
+    expect(root().querySelector("[matButton], .mat-mdc-button-base")).toBeNull();
+    expect(root().querySelector("button.heart.favourite-unselected")).not.toBeNull();
 
     fixture.componentRef.setInput("wishlisted", true);
     fixture.detectChanges();

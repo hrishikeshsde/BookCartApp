@@ -2,6 +2,10 @@
   <!-- Central package management: every package version lives here, project files reference packages without a Version. -->
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- Lets a PackageVersion below raise the version of a package that is only a dependency of another package (see the
+         "Transitive pins" group). The build treats warnings as errors, so a newly published advisory for any such package
+         fails restore (NU1902/NU1903) until it is raised here. -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup>
     <!-- BookCart -->
@@ -18,5 +22,11 @@
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
     <PackageVersion Include="coverlet.collector" Version="6.0.2" />
+  </ItemGroup>
+  <ItemGroup Label="Transitive pins">
+    <!-- Reached through Microsoft.EntityFrameworkCore.SqlServer > Microsoft.Data.SqlClient > Azure.Identity, which still
+         ask for 9.0.x. 9.0.11 has two advisories (GHSA-846f-f764-76mx high, GHSA-2fmv-rv2c-59x7 moderate), fixed in
+         10.0.13 for the .NET 10 line. Drop this pin when the SqlClient chain asks for a fixed version itself. -->
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
   </ItemGroup>
 </Project>

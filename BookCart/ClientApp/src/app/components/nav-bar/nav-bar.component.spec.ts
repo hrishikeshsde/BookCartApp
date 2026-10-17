@@ -1,7 +1,5 @@
-import { BreakpointObserver } from "@angular/cdk/layout";
 import { ComponentFixture, TestBed } from "@angular/core/testing";
 import { provideRouter, Router } from "@angular/router";
-import { of } from "rxjs";
 import { AuthStore } from "src/app/state/auth/auth.store";
 import { BooksStore } from "src/app/state/books/books.store";
 import { CartStore } from "src/app/state/cart/cart.store";
@@ -128,12 +126,11 @@ describe("NavBarComponent", () => {
   });
 });
 
-describe("NavBarComponent on a phone", () => {
+describe("NavBarComponent narrow and wide layouts", () => {
   let fixture: ComponentFixture<NavBarComponent>;
   let auth: ReturnType<typeof fakeAuthStore>;
   let cart: ReturnType<typeof fakeCartStore>;
   const root = () => fixture.nativeElement as HTMLElement;
-  const rows = () => root().querySelectorAll("mat-toolbar-row");
 
   beforeEach(() => {
     auth = fakeAuthStore();
@@ -142,7 +139,6 @@ describe("NavBarComponent on a phone", () => {
       imports: [NavBarComponent],
       providers: [
         provideRouter([]),
-        { provide: BreakpointObserver, useValue: { observe: () => of({ matches: true, breakpoints: {} }) } },
         { provide: BooksStore, useValue: fakeBooksStore([]) },
         { provide: AuthStore, useValue: auth },
         { provide: CartStore, useValue: cart },
@@ -153,16 +149,12 @@ describe("NavBarComponent on a phone", () => {
     fixture.detectChanges();
   });
 
-  it("puts the search box on a row of its own", () => {
-    expect(rows().length).toBe(2);
-    expect(rows()[1].querySelector("app-search")).not.toBeNull();
-    expect(rows()[0].querySelector("app-search")).toBeNull();
-  });
-
-  it("collapses the links into one menu button and drops the wide-screen links", () => {
-    expect(root().querySelector('button[aria-label="Menu"]')).not.toBeNull();
-    expect(root().textContent).not.toContain("API docs");
-    expect(root().textContent).not.toContain("GitHub");
+  // Which of them shows is decided by a CSS media query (so the page drawn in advance is right at any width, and nothing
+  // jumps when the app takes it over); a unit test sees both in the page.
+  it("has one search box, placed by CSS, and both the wide links and the narrow menu button", () => {
+    expect(root().querySelectorAll("app-search").length).toBe(1);
+    expect(root().querySelector(".wide-links")).not.toBeNull();
+    expect(root().querySelector('button.narrow-menu[aria-label="Menu"]')).not.toBeNull();
   });
 
   it("the menu offers Login and Register to a guest", () => {

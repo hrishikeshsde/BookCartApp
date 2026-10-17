@@ -72,11 +72,12 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: BookCart/ClientApp/package-lock.json
-      # .npmrc sets legacy-peer-deps (Bootstrap peers on @popperjs/core, which the app does not use).
       - run: npm ci
       # Vitest runs the specs in jsdom, so no browser is needed.
       - run: npm test
       - run: npm run build -- --configuration production
+      # Every file the pages and the CSS refer to exists, and no inline script or handler (the CSP would block it).
+      - run: npm run verify:dist
 
   container:
     name: Container image

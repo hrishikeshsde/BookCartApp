@@ -40,7 +40,7 @@ An e-commerce application for an online book store created with ASP.NET Core (.N
    `dotnet user-secrets set "Jwt:SecretKey" "<a random string of at least 32 characters>"`.
    Optional, for AI book summaries: `dotnet user-secrets set "Gemini:ApiKey" "<your key>"`.
 4. Run `dotnet run --launch-profile BookCart` from the `BookCart` folder (or launch from Visual Studio). The first Debug build installs the
-   Angular app's packages (`npm ci`; `ClientApp/.npmrc` sets `legacy-peer-deps` because Bootstrap peers on `@popperjs/core`, which the app does not use).
+   Angular app's packages (`npm ci`).
 5. Register a user in the app, then make them an admin: `UPDATE UserMaster SET UserTypeID = 1 WHERE Username = '<username>'`.
 
 # One-click scripts (Windows)

@@ -1,4 +1,5 @@
-import { Injectable } from "@angular/core";
+import { isPlatformBrowser } from "@angular/common";
+import { inject, Injectable, PLATFORM_ID } from "@angular/core";
 import { User } from "../models/user";
 import { UserType } from "../models/usertype";
 
@@ -38,13 +39,21 @@ export function decodeJwtPayload(token: string): JwtPayload | null {
 /**
  * The one place that knows where the login token is kept. Switching to another storage (an HttpOnly cookie, in
  * memory) means changing this file only.
+ *
+ * While a page is drawn at build time (prerendering) there is no browser storage: nobody is signed in then, and nothing
+ * is written.
  */
 @Injectable({
   providedIn: "root",
 })
 export class TokenStorage {
+  private readonly inBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+
   /** The stored token, or null when there is none, it is malformed or it has expired (such a token is removed). */
   get(): string | null {
+    if (!this.inBrowser) {
+      return null;
+    }
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token) {
       return null;
@@ -60,11 +69,15 @@ export class TokenStorage {
   }
 
   set(token: string) {
-    localStorage.setItem(TOKEN_KEY, token);
+    if (this.inBrowser) {
+      localStorage.setItem(TOKEN_KEY, token);
+    }
   }
 
   clear() {
-    localStorage.removeItem(TOKEN_KEY);
+    if (this.inBrowser) {
+      localStorage.removeItem(TOKEN_KEY);
+    }
   }
 
   /** The signed-in user described by the stored token, or null. */

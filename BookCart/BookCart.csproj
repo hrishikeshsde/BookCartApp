@@ -53,10 +53,11 @@
 
     <!-- Include the newly-built files in the publish output -->
     <ItemGroup>
-      <!-- prerendered-routes.json is an Angular build by-product the app never reads (there is no server-side rendering) -->
-      <DistFiles Include="$(SpaRoot)dist\**; $(SpaRoot)dist-server\**" Exclude="$(SpaRoot)dist\prerendered-routes.json" />
+      <!-- Only dist\browser is the site. The folders inside it (media\ with the fonts, and any prerendered page such as
+           login\index.html) must keep their place: the CSS and the browser ask for them by path. -->
+      <DistFiles Include="$(SpaRoot)dist\browser\**" />
       <ResolvedFileToPublish Include="@(DistFiles->'%(FullPath)')" Exclude="@(ResolvedFileToPublish)">
-        <RelativePath>wwwroot\%(FileName)%(Extension)</RelativePath>
+        <RelativePath>wwwroot\%(RecursiveDir)%(FileName)%(Extension)</RelativePath>
         <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
         <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
       </ResolvedFileToPublish>

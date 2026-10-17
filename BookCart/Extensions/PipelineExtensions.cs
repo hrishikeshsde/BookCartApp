@@ -13,9 +13,9 @@ namespace BookCart.Extensions
         // server (connect-src 'self'): the AI service is called by the API, not by the page.
         const string ContentSecurityPolicy =
             "default-src 'self'; script-src 'self'; " +
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://maxcdn.bootstrapcdn.com; " +
-            "font-src 'self' https://fonts.gstatic.com https://maxcdn.bootstrapcdn.com; " +
-            "img-src 'self' data: https://www.gstatic.com; " +   // gstatic: the Gemini sparkle icon on the summary button
+            "style-src 'self' 'unsafe-inline'; " +   // inline: the style attributes Angular Material sets at run time
+            "font-src 'self'; " +                    // Roboto and the icon font are bundled (@fontsource), nothing comes from a CDN
+            "img-src 'self' data:; " +               // data: the cover preview of a file chosen in the admin form
             "connect-src 'self'; " +
             "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
 
@@ -70,6 +70,24 @@ namespace BookCart.Extensions
                     RequestPath = "/Upload"
                 });
             }
+            // Pages the Angular build drew in advance (the home page is index.html, the others login/index.html and so on) are
+            // served for their own address. Everything else that is a page route falls through to the fallback below.
+            app.Use(async (context, next) =>
+            {
+                if (HttpMethods.IsGet(context.Request.Method) || HttpMethods.IsHead(context.Request.Method))
+                {
+                    var path = context.Request.Path.Value ?? "/";
+                    if (!Path.HasExtension(path))
+                    {
+                        var page = path.TrimEnd('/') + "/index.html";
+                        if (app.Environment.WebRootFileProvider.GetFileInfo(page).Exists)
+                        {
+                            context.Request.Path = page;
+                        }
+                    }
+                }
+                await next();
+            });
             app.UseStaticFiles();
             app.UseRouting();
             app.UseRateLimiter();        // after routing: [EnableRateLimiting] is endpoint metadata
@@ -108,7 +126,25 @@ namespace BookCart.Extensions
             // served for page routes only: a path that names a file (missing-chunk.js) is a 404 instead. GET and HEAD
             // only, so that a POST with the wrong content type still gets the framework's 415 and a wrong method its
             // 405, instead of being swallowed by the fallback.
-            app.MapFallbackToFile(SpaFallbackPattern, "index.html")
+            // The shell is index.csr.html when the build also drew some pages in advance: index.html is then the drawn
+            // home page, which the running app can only take over on the home address. A build without drawn pages has
+            // just index.html.
+            app.MapFallback(SpaFallbackPattern, async context =>
+                {
+                    var webRoot = context.RequestServices.GetRequiredService<IWebHostEnvironment>().WebRootFileProvider;
+                    var shell = webRoot.GetFileInfo("index.csr.html");
+                    if (!shell.Exists)
+                    {
+                        shell = webRoot.GetFileInfo("index.html");
+                    }
+                    if (!shell.Exists)
+                    {
+                        context.Response.StatusCode = StatusCodes.Status404NotFound;
+                        return;
+                    }
+                    context.Response.ContentType = "text/html; charset=utf-8";
+                    await context.Response.SendFileAsync(shell);
+                })
                 .WithMetadata(new HttpMethodMetadata(["GET", "HEAD"]))
                 .AllowAnonymous();
 

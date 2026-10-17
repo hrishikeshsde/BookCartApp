@@ -147,6 +147,54 @@ public class PlumbingTests(ApiFactory factory)
         }
     }
 
+    [Fact]
+    public async Task Pages_drawn_in_advance_are_served_at_their_own_address_and_every_other_page_route_gets_the_client_shell()
+    {
+        // What an Angular build with prerendering leaves in wwwroot: the drawn home page is index.html, the other drawn
+        // pages sit in folders, and index.csr.html is the shell for every route that was not drawn in advance.
+        Directory.CreateDirectory(Path.Combine(_factory.WebRoot, "login"));
+        var files = new Dictionary<string, string>
+        {
+            ["index.html"] = "<html>drawn home</html>",
+            ["index.csr.html"] = "<html>client shell</html>",
+            [Path.Combine("login", "index.html")] = "<html>drawn login</html>",
+        };
+        foreach (var (name, content) in files)
+        {
+            await File.WriteAllTextAsync(Path.Combine(_factory.WebRoot, name), content);
+        }
+        try
+        {
+            var client = _factory.CreateClient();
+
+            Assert.Contains("drawn home", await client.GetStringAsync("/"));
+            Assert.Contains("drawn login", await client.GetStringAsync("/login"));
+            Assert.Contains("drawn login", await client.GetStringAsync("/login/"));
+            Assert.Contains("client shell", await client.GetStringAsync("/register"));            // not drawn in advance
+            Assert.Contains("client shell", await client.GetStringAsync("/wishlist"));
+            Assert.Contains("client shell", await client.GetStringAsync("/books/details/5"));
+            Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/nope")).StatusCode);     // never a page
+            Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/missing-chunk.js")).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/book")).StatusCode);
+
+            var head = await client.SendAsync(new HttpRequestMessage(HttpMethod.Head, "/login"));
+            Assert.Equal(HttpStatusCode.OK, head.StatusCode);
+            Assert.Equal("text/html", head.Content.Headers.ContentType?.MediaType);
+
+            // A login is a POST to the API: the page rewrite must not touch it (it only answers GET and HEAD).
+            var post = await client.PostAsync("/api/login", new StringContent("{}", System.Text.Encoding.UTF8, "application/json"));
+            Assert.NotEqual(HttpStatusCode.NotFound, post.StatusCode);
+        }
+        finally
+        {
+            foreach (var name in files.Keys)
+            {
+                File.Delete(Path.Combine(_factory.WebRoot, name));
+            }
+            Directory.Delete(Path.Combine(_factory.WebRoot, "login"));
+        }
+    }
+
     // ---- health ------------------------------------------------------------------------------------------------
 
     [Fact]

@@ -7,7 +7,7 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 const puppeteer = require('puppeteer-core');
 const { execSync } = require('child_process');
 
-const API = 'https://localhost:7073';
+const API = process.env.API || 'https://localhost:7073';
 const WEB = process.env.WEB || 'https://localhost:53424';
 const CHROME = process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const EXPECT_F1 = process.argv.includes('--expect-f1');
@@ -231,7 +231,7 @@ async function uiLogin(page, u) {
     await page.type('input[formcontrolname="password"]', USER.password);
     await clickText(page, 'form button', 'Login');
     await waitFn(page, () => !!localStorage.getItem('authToken') && location.pathname === '/');
-    if (!(await page.evaluate(() => location.origin)).startsWith('https://localhost')) throw new Error('left the app');
+    if ((await page.evaluate(() => location.origin)) !== new URL(WEB).origin) throw new Error('left the app');
   }, { known: true });
   await step('token removed behind the app: the next call goes to login without a page reload', async () => {
     await page.evaluate(() => { window.__marker = 'same-document'; localStorage.removeItem('authToken'); });

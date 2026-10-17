@@ -1,5 +1,3 @@
-import { BreakpointObserver } from "@angular/cdk/layout";
-import { NgTemplateOutlet } from "@angular/common";
 import {
   ChangeDetectionStrategy,
   Component,
@@ -13,7 +11,7 @@ import { MatButton, MatIconButton } from "@angular/material/button";
 import { MatDivider } from "@angular/material/divider";
 import { MatIcon } from "@angular/material/icon";
 import { MatMenu, MatMenuItem, MatMenuTrigger } from "@angular/material/menu";
-import { MatToolbar, MatToolbarRow } from "@angular/material/toolbar";
+import { MatToolbar } from "@angular/material/toolbar";
 import {
   NavigationEnd,
   Router,
@@ -27,21 +25,13 @@ import { CartStore } from "src/app/state/cart/cart.store";
 import { WishlistStore } from "src/app/state/wishlist/wishlist.store";
 import { SearchComponent } from "../search/search.component";
 
-/**
- * Below this width (1024px) the links collapse into a menu and the search box moves to a row of its own: a signed-in
- * admin has too many links to share a row with a usable search box on a tablet.
- */
-const HANDSET = "(max-width: 63.99rem)";
-
 @Component({
   selector: "app-nav-bar",
   templateUrl: "./nav-bar.component.html",
   styleUrls: ["./nav-bar.component.scss"],
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    NgTemplateOutlet,
     MatToolbar,
-    MatToolbarRow,
     MatButton,
     MatIconButton,
     MatIcon,
@@ -64,13 +54,6 @@ export class NavBarComponent {
 
   /** The backend serves its API reference (/scalar) in Development only, so only dev builds link to it. */
   protected readonly showApiDocs = isDevMode();
-
-  protected readonly isHandset = toSignal(
-    inject(BreakpointObserver)
-      .observe(HANDSET)
-      .pipe(map((state) => state.matches)),
-    { initialValue: false }
-  );
 
   protected readonly userState = computed(() => ({
     isAuthenticated: this.auth.isAuthenticated(),

@@ -1,3 +1,4 @@
+import { PLATFORM_ID } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { anHourAgo, aToken, inOneHour } from "../testing/fixtures";
 import { decodeJwtPayload, TokenStorage } from "./token-storage.service";
@@ -73,5 +74,32 @@ describe("decodeJwtPayload", () => {
     expect(decodeJwtPayload("")).toBeNull();
     expect(decodeJwtPayload("a.b.c")).toBeNull();
     expect(decodeJwtPayload("only-one-part")).toBeNull();
+  });
+});
+
+describe("TokenStorage while a page is drawn at build time", () => {
+  let storage: TokenStorage;
+
+  beforeEach(() => {
+    localStorage.removeItem("authToken");
+    TestBed.configureTestingModule({ providers: [{ provide: PLATFORM_ID, useValue: "server" }] });
+    storage = TestBed.inject(TokenStorage);
+  });
+  afterEach(() => localStorage.removeItem("authToken"));
+
+  it("knows no token and no user, even when the (test) machine has one stored", () => {
+    localStorage.setItem("authToken", aToken({ userId: "7", exp: inOneHour() }));
+    expect(storage.get()).toBeNull();
+    expect(storage.user()).toBeNull();
+  });
+
+  it("writes and removes nothing", () => {
+    storage.set(aToken({ userId: "7", exp: inOneHour() }));
+    expect(localStorage.getItem("authToken")).toBeNull();
+
+    const kept = aToken({ userId: "8", exp: inOneHour() });
+    localStorage.setItem("authToken", kept);
+    storage.clear();
+    expect(localStorage.getItem("authToken")).toBe(kept);
   });
 });

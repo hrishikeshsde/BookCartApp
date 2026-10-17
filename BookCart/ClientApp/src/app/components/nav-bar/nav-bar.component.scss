@@ -4,10 +4,13 @@
   display: block;
 }
 
-// The toolbar is the primary colour; what sits on it (links, icons, badges) takes the matching "on" colours.
+// The toolbar is the primary colour; what sits on it (links, icons, badges) takes the matching "on" colours. Its height
+// is whatever its content needs (one row wide, two rows narrow).
 mat-toolbar {
   --mat-toolbar-container-background-color: var(--mat-sys-primary);
   --mat-toolbar-container-text-color: var(--mat-sys-on-primary);
+  --mat-toolbar-standard-height: auto;
+  --mat-toolbar-mobile-height: auto;
   --mat-button-text-label-text-color: var(--mat-sys-on-primary);
   --mat-button-text-state-layer-color: var(--mat-sys-on-primary);
   --mat-button-text-ripple-color: color-mix(in srgb, var(--mat-sys-on-primary) 12%, transparent);
@@ -17,10 +20,76 @@ mat-toolbar {
   --mat-badge-text-color: var(--mat-sys-on-error);
 }
 
+// Wide: the brand, the search box in the middle, the links. Narrow (below 1024px, where a signed-in admin's links no
+// longer leave room for a usable search box): the links collapse into one menu button and the search box moves to a
+// row of its own. All of it is CSS, so the page drawn in advance has the right layout at any width (a script that asked
+// for the width would leave the drawn page wrong, and the page would jump when it took over).
+.bar {
+  display: grid;
+  width: 100%;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "brand search links";
+  align-items: center;
+  column-gap: 1rem;
+  padding-block: 0.5rem;
+}
+
 .brand {
+  grid-area: brand;
+  justify-self: start;
   font-size: 1.125rem;
   font-weight: 500;
   letter-spacing: 0.02em;
+}
+
+.search {
+  grid-area: search;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+
+.links {
+  grid-area: links;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.wide-links {
+  display: flex;
+  align-items: center;
+}
+
+.narrow-menu {
+  display: none;
+}
+
+@media (max-width: 63.99rem) {
+  .bar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "brand links"
+      "search search";
+    row-gap: 0.5rem;
+    padding-bottom: 0.75rem;
+  }
+
+  .search {
+    justify-content: stretch;
+  }
+
+  .search app-search {
+    max-width: none;
+  }
+
+  .wide-links {
+    display: none;
+  }
+
+  .narrow-menu {
+    display: inline-flex;
+  }
 }
 
 // The page the visitor is on.
@@ -33,19 +102,8 @@ mat-toolbar {
   margin-right: 4px;
 }
 
-// The search box on its own row (narrow screens): a little air and the toolbar's own height.
-.search-row {
-  height: auto;
-  padding-block: 0 0.75rem;
-}
-
 .menu-heading {
   padding: 0.5rem 1rem;
   font: var(--mat-sys-label-medium);
   color: var(--mat-sys-on-surface-variant);
-}
-
-// On its own row the search box takes the whole width.
-.search-row app-search {
-  max-width: none;
 }

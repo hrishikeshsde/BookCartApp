@@ -14,7 +14,7 @@ All phases are done on one branch (`modernize/f1-security`, created by the repo 
 | F4 | Signals, smart/dumb components, zoneless | Done |
 | F5 | State management: classic NgRx to SignalStore | Done |
 | F6 | Material 3 theme, Tailwind, responsive layout, images, accessibility | Done |
-| F7 | SSR | Not started (optional) |
+| F7 | Hydration and build-time prerendering (no Node at run time) | Done (optional phase) |
 
 ## Step 0: baseline
 
@@ -315,6 +315,60 @@ Screenshots at 360, 768 and 1280 px in light and dark were taken before and afte
 | F6-8 | The admin book form's cover preview is a plain `img` (it shows a local file, which `NgOptimizedImage` does not take). | None. | Note |
 
 
+## F7: hydration and build-time prerendering
+
+Branch `modernize/f7-ssr` (created by the repo owner). **Approach chosen by the repo owner** (the plan makes F7 optional and warns it changes hosting): hydration plus prerendering of the public pages at build time, with **no Node process at run time**. ASP.NET still only serves static files, `SpaProxy`, `dotnet publish` and `PublishContainer` work as before. The alternative (a real Node SSR server behind ASP.NET, so that crawlers get the catalogue and book pages with their data) was not built; F7-1 says what it would take.
+
+**What is drawn at build time:** `/`, `/login` and `/register` (`app.routes.server.ts`, `outputMode: "static"`). Home is its frame (header, filters, the "Books" heading, a spinner): the books come from the API in the browser. Every other route is `RenderMode.Client`: it is served as the empty shell `index.csr.html`.
+
+**App changes**
+- `app/app.config.ts` holds the providers that `main.ts` used to hold (`main.ts` is three lines now); `app.config.server.ts`, `main.server.ts` and `app.routes.server.ts` are the build-only part. `@angular/ssr` and `@angular/platform-server` are pinned to 22.2.2 with the rest of Angular. The schematic's Express `server.ts` is not used (removed, with `express`).
+- `provideClientHydration(withNoIncrementalHydration())`: the running app takes over the drawn page instead of drawing it again. Event replay (and with it incremental hydration) is off: Angular puts an inline script in every page for it, which the Content-Security-Policy (`script-src 'self'`) blocks. The plan's `withEventReplay()` was therefore not used.
+- `TokenStorage` does nothing outside the browser (the guard the plan asks for): there is no `localStorage` while a page is drawn, so nobody is signed in then.
+- `noApiOnServerInterceptor`: while a page is drawn, a call to `/api/...` ends with no answer (there is no API to ask at build time). The page is drawn in its "loading" state, which is also how the browser starts, so the app takes it over without a difference.
+- The nav bar's layout is CSS now (a grid with one media query at 1024 px) instead of `BreakpointObserver`. The drawn page cannot know the screen width, and the first version (width asked by a script) made the nav jump from one row to two on a phone when the app took over (CLS 0.03). One search box, the wide links and the narrow menu button are all in the page; CSS shows the right ones.
+
+**Host changes**
+- `PipelineExtensions`: a drawn page is served at its own address (`/login` serves `login/index.html`, `/` serves the drawn `index.html`); every other page route gets `index.csr.html` (or `index.html` for a build without drawn pages). Without this, a deep link such as `/wishlist` would have received the drawn home page, which cannot be taken over on another address. A backend test covers it (the three mutations that matter were caught; the fourth, the "no file extension" guard, is an equivalent mutant).
+- The publish target copies `dist/browser` keeping its folders (see the defects below).
+
+### Defects found while confirming F6 (fixed on this branch)
+
+Re-checking F6 against a real `dotnet publish` (the dev server and the unit tests had hidden them):
+1. **Every font was a 404 in a published build.** The publish target flattened `dist/` into `wwwroot` (`wwwroot\%(FileName)%(Extension)`) while the CSS asks for `media/roboto-....woff2`. Since F0 (self-hosted fonts) Roboto fell back to a system font; since F6 the Material icons (the cart, the menu) would have shown as their names ("shopping_cart"). Fixed by keeping the relative paths (`%(RecursiveDir)`) and publishing only `dist/browser`.
+2. **A CSP violation on every page:** Angular's critical-CSS inlining adds an `onload` handler to a link tag, which `script-src 'self'` forbids. `inlineCritical` is off in the production build.
+3. **The CSP still allowed Google Fonts, the Bootstrap CDN and gstatic**, none of which the app uses any more. They are gone from the policy (`PipelineExtensions`). A check of the published app against the policy now reports **no violations** on five routes, so `Security:EnforceCsp` can be switched on if you wish (it is still report-only by default).
+4. Small leftovers: a Bootstrap `display-4` class on the details page, and three statements that still described `.npmrc`, Bootstrap or `withXhr()` (`README.md`, `ci.yml`, `CLAUDE.md`).
+5. A guard so it cannot come back: `npm run verify:dist` (`verify-static.js`, run by CI after the production build) checks that every file the pages and the CSS refer to exists and that no page has an inline script or event-handler attribute. It also works on a publish folder (`node verify-static.js <publish>/wwwroot`); it fails on the two broken outputs above.
+
+**Result**
+| | F6 | F7 |
+|---|---|---|
+| Initial bundle | 900.2 kB raw / 202.5 kB transfer | 927.7 kB raw / 211.1 kB transfer (+27.5 kB: the hydration runtime) |
+| Unit tests | 240 | 244 |
+| Backend tests | 207 | 208 (the serving rules) |
+| Smoke test | 25 of 25 (dev server) | 25 of 25 on the dev server **and** on the production build served by the real backend (the script takes `API` and `WEB` from the environment now) |
+| axe | 0 (10 pages; 12 interactive states: errors, empty pages, menus, dialog, paginator) | 0 on the production build (the same 10 pages, 360 and 1280 px, light and dark) |
+| First paint, measured in Chrome without throttling (warm, 4 runs) | login 156-264 ms, home 264-288 ms; **no JavaScript: nothing is painted** | login 72-208 ms, home 68-212 ms; **no JavaScript: the page is painted at about 70-90 ms** |
+| Lighthouse, mobile, simulated slow 4G (home / details / login) | 61 / 61 / 60, FCP 4.3-4.4 s | 62 / 54 / 56, FCP 4.2-4.6 s: **no measurable change**. Accessibility 100, best practices 100, CLS 0 |
+
+Lighthouse's simulated numbers vary by 10 points or more between runs on this machine (the same F6 build scored 61 and 73 in two harnesses), and its model keeps the render-blocking stylesheets and the font chain on the path either way, so it cannot show a gain of this size. What F7 changes is what a visitor sees first: with JavaScript off, or before the bundle has arrived, the three public pages are there instead of a blank page.
+
+Hydration was checked in a development build (mismatches are only reported there): at 360 and 1280 px, as a guest and as a signed-in admin, on six routes, with "Angular hydrated N components, 0 skipped" and no warnings.
+
+### F7 follow-ups
+
+| # | Left over | What to do | Belongs to |
+|---|---|---|---|
+| F7-1 | This is not server-side rendering of data: the book pages and the catalogue are still filled in by the browser, so a crawler that does not run JavaScript sees the frame and the h1 only. | If SEO of the book pages matters: `outputMode: "server"` (a Node process running the `@angular/ssr` server), ASP.NET forwarding page requests to it, Node added to the container image (the SDK container build has none), the books and categories fetched on the server (the interceptor would let `/api` through to the real API), and a transfer of that data to the browser. | Optional |
+| F7-2 | A signed-in visitor receives the guest frame first (the nav says "Login" until the app takes over), then it changes. | Acceptable. A "signed in" hint cookie could draw the right nav, at the cost of a second source of truth. | Note |
+| F7-3 | Text typed into the drawn login or register form before the app has taken over can be lost when it does (without event replay nothing restores it). | Rare (the bundle loads in a fraction of a second); fixing it means event replay, which needs a CSP hash or nonce for its inline script. | Note |
+| F7-4 | `ng serve` (development) does not prerender; only the production build does. | Use `npm run build` and the backend to see the drawn pages. | Note |
+| F7-5 | CI checks `dist/browser` (`verify:dist`), not the layout of a `dotnet publish` folder, so a regression in the publish target would only be caught by hand. | Run `node verify-static.js` on the publish folder in CI. | Cleanup |
+| F7-6 | `Security:EnforceCsp` is still false (report-only), although the built app now produces no violations. | Switch it on in the deployment settings once you have looked at your own environment. | Decision |
+| F7-7 | The screenshot, axe, state-check, hydration and Lighthouse scripts used for F6 and F7 are not in the repo (F6-7). | Add them under `scripts/` with `axe-core` as a dev dependency. | Cleanup |
+
+
 ## Differences from the plan
 
 | Plan said | Done | Why |
@@ -338,6 +392,10 @@ Screenshots at 360, 768 and 1280 px in light and dark were taken before and afte
 | F6.5 `@defer` for `similarbooks` and `book-summary` | `similarbooks` only | The summary is one button, nothing to defer |
 | F6.5 budgets 500 kB warning, 1 MB error | 950 kB warning, 1.2 MB error | The bundle is 900 kB; 500 kB needs SSR or less Material. This catches regressions |
 | F6 verify: Lighthouse before and after | After only, with axe and bundle before and after | No baseline was ever recorded (F6-1) |
+| F7 `provideClientHydration(withEventReplay())` | `withNoIncrementalHydration()`, no event replay | Its inline script is blocked by the CSP (F7-3) |
+| F7 `ng add @angular/ssr` (Express `server.ts`, server output) | Static output (`outputMode: "static"`), no server file, no Express | The owner chose prerendering without a Node process (F7-1) |
+| F7 "prerender only the public routes (home and details)" | Home, login, register | The details page is data (the book), which does not exist at build time |
+| F6.3 `BreakpointObserver` for the nav | CSS grid with a media query | The drawn page cannot know the width; the observer made the nav jump (CLS) |
 
 ## Open items
 
@@ -349,5 +407,5 @@ Screenshots at 360, 768 and 1280 px in light and dark were taken before and afte
 | 4 | Done in F6: the Gemini button uses a Material icon; no external request is left. | Done |
 | 5 | Done in F6: HTTP goes through `fetch`. | Done |
 | 6 | Done in F5: F4-1 (no async pipe left) and F4-2 (search text read from the address). | Done |
-| 8 | The F5 follow-ups (F5-1 to F5-6) and the F6 follow-ups (F6-1 to F6-8) above. | Optional |
+| 8 | The F5 follow-ups (F5-1 to F5-6), the F6 follow-ups (F6-1 to F6-8) and the F7 follow-ups (F7-1 to F7-7) above. | Optional |
 | 7 | Smoke test cleanup: drop the `known` flag and `--expect-f1`, add the run helper to the repo (F4-6); Default_image NG0913 (F4-7); small test and form items (F4-8, F4-9). See the F4 follow-ups table. | Cleanup, F6 |

@@ -1,7 +1,13 @@
 // The Material 3 theme: one set of --mat-sys-* design tokens (colours, typography, density, shape, elevation) that
 // every Material component and every style in this app reads. `color-scheme: light dark` follows the visitor's system
 // setting, so there is no theme switch to maintain. Change the look by changing the palettes here.
+//
+// Violet is the brand colour (nav bar, page headers, links, buttons); orange is the accent (the Add to Cart button,
+// prices, the search focus ring). The two --bc-* values below are built only from the tokens, so they follow the
+// palettes and the dark mode: `--bc-brand-gradient` is the violet-to-orange band of the nav bar and page headers,
+// `--bc-card-tint` is the faintly violet surface of cards.
 @use "@angular/material" as mat;
+@use "sass:map";
 
 html {
   color-scheme: light dark;
@@ -9,11 +15,23 @@ html {
     (
       color: (
         theme-type: color-scheme,
-        primary: mat.$azure-palette,
-        tertiary: mat.$rose-palette,
+        primary: mat.$violet-palette,
+        tertiary: mat.$orange-palette,
       ),
       typography: Roboto,
       density: 0,
     )
   );
+
+  // Interpolated in oklch so the band passes through magenta instead of a muddy grey; both ends have the same tone,
+  // so the "on primary" text keeps its contrast along the whole band.
+  --bc-brand-gradient: linear-gradient(100deg in oklch, var(--mat-sys-primary), var(--mat-sys-tertiary));
+  --bc-card-tint: color-mix(in oklab, var(--mat-sys-primary-container) 30%, var(--mat-sys-surface));
+
+  // The accent for buttons. Material's light-mode tertiary is a dark brown (tone 40, which keeps white text readable
+  // on the nav band), so in light mode the buttons take the palette's bright orange (tone 70) with its darkest tone
+  // as text. In dark mode the Material tertiary is already a bright orange. Prices stay on the tertiary token: a
+  // bright orange as text on a pale card is below the contrast a reader needs.
+  --bc-accent: light-dark(#{map.get(mat.$orange-palette, 70)}, var(--mat-sys-tertiary));
+  --bc-on-accent: light-dark(#{map.get(mat.$orange-palette, 10)}, var(--mat-sys-on-tertiary));
 }

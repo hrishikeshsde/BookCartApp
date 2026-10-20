@@ -261,7 +261,7 @@ Branch `modernize/f5-signalstore` (created by the repo owner). `@ngrx/store`, `@
 Branch `modernize/f6-ui` (created by the repo owner). Bootstrap is uninstalled (so is `ClientApp/.npmrc`, which only existed for its peer dependency; `npm ci --dry-run` is clean without it); `tailwindcss`, `@tailwindcss/postcss` and `postcss` are added as dev dependencies.
 
 **F6.1 Material 3 theme**
-- `src/styles/theme.scss` is the one theme: `mat.theme` with an azure primary and a rose tertiary palette, Roboto, `color-scheme: light dark`. Dark mode follows the system setting and needs no code. It replaces the `indigo-pink.css` prebuilt theme in `angular.json` (build and test).
+- `src/styles/theme.scss` is the one theme: `mat.theme` with a violet primary and an orange tertiary palette (changed from azure and rose to make the app colourful: see "Vibrant theme" below), Roboto, `color-scheme: light dark`. Dark mode follows the system setting and needs no code. It replaces the `indigo-pink.css` prebuilt theme in `angular.json` (build and test).
 - Every colour in the styles is a `--mat-sys-*` token now (the 20 hard-coded colour codes, including `#ff4081`, `#b30000`, `#fafafa`, are gone; a grep finds none). The pink banner of a page card is the tertiary container (`.custom-card-header`), the chosen category is Material's own "activated" state, the wishlist heart is `--mat-sys-error`.
 - Buttons use the Material 3 API: `matButton="filled|tonal|outlined|text"` and `matIconButton`. M3 buttons have no `color="warn"`, so a destructive button is `class="danger"` (it sets the button's colour tokens). Cancel buttons are outlined, buttons that navigate are `<a matButton>`. `mat-elevation-z*` classes became `shadow-level-1..5` (the M3 elevation tokens), `mat-h1`/`mat-h4` became `.card-heading`/`.card-subheading`.
 
@@ -368,6 +368,16 @@ Hydration was checked in a development build (mismatches are only reported there
 | F7-6 | `Security:EnforceCsp` is still false (report-only), although the built app now produces no violations. | Switch it on in the deployment settings once you have looked at your own environment. | Decision |
 | F7-7 | The screenshot, axe, state-check, hydration and Lighthouse scripts used for F6 and F7 are not in the repo (F6-7). | Add them under `scripts/` with `axe-core` as a dev dependency. | Cleanup |
 
+
+## Vibrant theme (after F7)
+
+The F6 theme was correct but looked black and white: near-white and near-black surfaces, with colour only on small controls. Chosen with the owner: violet primary, orange accent, bold, light and dark following the system.
+
+- `src/styles/theme.scss`: `mat.$violet-palette` primary, `mat.$orange-palette` tertiary. It also defines `--bc-brand-gradient` (violet to orange, interpolated in oklch so it passes through magenta), `--bc-card-tint`, `--bc-accent` and `--bc-on-accent`. They are built from the `--mat-sys-*` tokens (and one palette tone), so there are still no colour codes in the styles.
+- `src/styles.scss`: a violet wash and an orange glow behind the page; every `mat-card` takes `--bc-card-tint`; the page-card header band (`.custom-card-header`) uses the brand gradient.
+- The nav bar, the book cards (tinted, violet border, violet glow on hover, orange prices), the category list (`bg-card`, a new Tailwind colour in `tailwind.css`) and the Add to Cart button (`--bc-accent`) follow.
+- Contrast: both ends of the gradient have the same tone, so white (or dark, in dark mode) text keeps its contrast along it. In light mode the Material tertiary is a dark brown, so the button uses orange tone 70 with tone 10 text instead; prices stay on the tertiary token because a bright orange as text on a pale card is under 4.5:1.
+- Checked with headless-Chrome screenshots of home, login, register and cart in light and dark mode, the 244 unit tests, the production build and `npm run verify:dist`. Not re-run: the browser smoke test and a Lighthouse pass. Phone width was not checked by screenshot (headless Chrome will not go below about 500 px wide); only colours changed, no layout rule did.
 
 ## Differences from the plan
 

@@ -13,12 +13,23 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
+// A violet wash that fades into the plain surface down the page, with a soft orange glow in the top corner.
 body {
   margin: 0;
   font: var(--mat-sys-body-large);
   font-kerning: normal;
   color: var(--mat-sys-on-surface);
-  background: var(--mat-sys-surface);
+  background-color: var(--mat-sys-surface);
+  background-image:
+    radial-gradient(50rem 24rem at 90% 0, color-mix(in oklab, var(--mat-sys-tertiary-container) 55%, transparent), transparent),
+    linear-gradient(180deg, color-mix(in oklab, var(--mat-sys-primary-container) 65%, var(--mat-sys-surface)), var(--mat-sys-surface) 40rem);
+  background-repeat: no-repeat;
+  min-height: 100dvh;
+}
+
+// Every Material card (the page cards, the filters, the forms) takes the faintly violet surface.
+mat-card {
+  --mat-card-elevated-container-color: var(--bc-card-tint);
 }
 
 h1,
@@ -62,8 +73,8 @@ mat-card-header.custom-card-header {
   display: flex;
   align-items: center;
   padding: 0.75rem 1rem;
-  background: var(--mat-sys-tertiary-container);
-  color: var(--mat-sys-on-tertiary-container);
+  background: var(--bc-brand-gradient);
+  color: var(--mat-sys-on-primary);
   box-shadow: var(--mat-sys-level1);
 }
 

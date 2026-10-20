@@ -1,4 +1,10 @@
+// The call to action is the accent colour (orange), so it stands out from the violet brand colour around it.
 button {
+  --mat-button-filled-container-color: var(--bc-accent);
+  --mat-button-filled-label-text-color: var(--bc-on-accent);
+  --mat-button-filled-state-layer-color: var(--bc-on-accent);
+  --mat-button-filled-ripple-color: color-mix(in srgb, var(--bc-on-accent) 12%, transparent);
+
   mat-icon {
     font-size: 16px;
   }

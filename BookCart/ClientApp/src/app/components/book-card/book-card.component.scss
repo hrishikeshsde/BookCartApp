@@ -5,7 +5,8 @@
 .book-card {
   position: relative;
   overflow: hidden;
-  background: var(--mat-sys-surface-container-low);
+  background: var(--bc-card-tint);
+  border: 1px solid color-mix(in oklab, var(--mat-sys-primary) 20%, transparent);
   transition: box-shadow 200ms ease, transform 200ms ease;
 }
 
@@ -51,7 +52,8 @@
 
 .price {
   margin: 0.25rem 0 0.75rem;
-  color: var(--mat-sys-on-surface-variant);
+  font-weight: 600;
+  color: var(--mat-sys-tertiary);
 }
 
 app-addtocart {
@@ -59,7 +61,7 @@ app-addtocart {
 }
 
 .on-book-card-hover {
-  box-shadow: var(--mat-sys-level3);
+  box-shadow: 0 0.5rem 1.5rem color-mix(in srgb, var(--mat-sys-primary) 30%, transparent);
   transform: translateY(-2px);
 }
 

@@ -35,6 +35,7 @@
   --color-surface: var(--mat-sys-surface);
   --color-on-surface: var(--mat-sys-on-surface);
   --color-on-surface-variant: var(--mat-sys-on-surface-variant);
+  --color-card: var(--bc-card-tint);
   --color-surface-container-low: var(--mat-sys-surface-container-low);
   --color-surface-container: var(--mat-sys-surface-container);
   --color-surface-container-high: var(--mat-sys-surface-container-high);

@@ -48,8 +48,9 @@
 
   <Target Name="PublishBuildClient" AfterTargets="ComputeFilesToPublish">
     <!-- As part of publishing, build the Angular app in production mode (from the lock file, so the build is reproducible) -->
-    <Exec WorkingDirectory="$(SpaRoot)" Command="npm ci" />
-    <Exec WorkingDirectory="$(SpaRoot)" Command="npm run build -- --configuration production" />
+    <!-- The Docker build compiles the Angular site in its own stage and passes -p:SkipClientBuild=true, so the SDK image needs no Node. -->
+    <Exec Condition="'$(SkipClientBuild)' != 'true'" WorkingDirectory="$(SpaRoot)" Command="npm ci" />
+    <Exec Condition="'$(SkipClientBuild)' != 'true'" WorkingDirectory="$(SpaRoot)" Command="npm run build -- --configuration production" />
 
     <!-- Include the newly-built files in the publish output -->
     <ItemGroup>

@@ -1,7 +1,20 @@
-# Production stack for one Docker host: SQL Server + the BookCart image.
-# Start it with scripts\release.bat (it builds the image, creates deploy\.env, applies migrations and starts everything).
-# Settings come from deploy\.env (see .env.example); that file holds secrets and is git-ignored.
+# The production stack for one Docker host: SQL Server, a one-shot migration, the BookCart app, and (optionally) Caddy
+# for HTTPS. See docs/DEPLOYMENT_IMPLEMENTATION_PLAN.md.
+#
+#   sqlserver --healthy--> migrate --exits 0--> app --healthy--> caddy
+#
+# Settings come from deploy/.env (see .env.example); that file holds secrets and is git-ignored.
+# The images are built from the Dockerfile at the repository root, so nothing needs to be installed on the host
+# except Docker, and nothing needs to be built or published beforehand.
+#
+# Two modes, chosen by COMPOSE_PROFILES in deploy/.env:
+#   (empty)  plain HTTP: the app is published on APP_PORT (default 8080), there is no Caddy.
+#   https    Caddy answers on ports 80 and 443 for DOMAIN and gets its certificate from Let's Encrypt. The app is then
+#            published on the loopback address only (APP_BIND=127.0.0.1), so Caddy is the only way in.
 name: bookcart
+
+# One connection string for the app and for the migration. SQL Server is not published outside the Docker network.
+x-database: &database Server=sqlserver,1433;Database=BookDB;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True
 
 services:
   sqlserver:
@@ -10,10 +23,11 @@ services:
     restart: unless-stopped
     environment:
       ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: ${SA_PASSWORD:?run scripts\release.bat once to create deploy\.env}
-    ports:
-      # Localhost only: the migrations are applied from the host. Nothing outside this machine can reach the database.
-      - "127.0.0.1:${SQL_PORT:-14331}:1433"
+      # The image's own default is the Developer edition, which is licensed for development and testing only. Express
+      # is free for production (limits: 10 GB per database, about 1.4 GB of memory for data pages, 4 cores): plenty here.
+      # Changing it on an existing data volume works in place and keeps the data.
+      MSSQL_PID: ${MSSQL_PID:-Express}
+      MSSQL_SA_PASSWORD: "${SA_PASSWORD:?SA_PASSWORD is missing, copy deploy/.env.example to deploy/.env and fill it in}"
     volumes:
       - sqldata:/var/opt/mssql
     healthcheck:
@@ -23,41 +37,76 @@ services:
       retries: 12
       start_period: 20s
 
-  # New named volumes are owned by root, but the app runs as uid 1654 and could not write uploads or its keys.
-  init-volumes:
-    image: bookcart:${BOOKCART_TAG:-latest}
-    user: "0"
-    entrypoint: ["chown", "-R", "1654:1654", "/data/uploads", "/data/keys"]
+  # Applies the EF Core migrations, then exits (0 when the database is up to date, 1 on any failure). The app starts
+  # only after it succeeded, so a failed migration leaves the previous app running instead of a half-upgraded one.
+  migrate:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: migrate
+    image: bookcart-migrate:${BOOKCART_TAG:-latest}
     restart: "no"
-    volumes:
-      - uploads:/data/uploads
-      - keys:/data/keys
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      # Read by the migration bundle (BookDBContextFactory); keeps the password out of the command line.
+      BOOKCART_EF_CONNECTION: *database
 
   app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: app
     image: bookcart:${BOOKCART_TAG:-latest}
     container_name: bookcart-app
     restart: unless-stopped
     depends_on:
-      sqlserver:
-        condition: service_healthy
-      init-volumes:
+      migrate:
         condition: service_completed_successfully
     environment:
-      ConnectionStrings__DefaultConnection: Server=sqlserver,1433;Database=BookDB;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True
-      Jwt__SecretKey: ${JWT_SECRET:?JWT_SECRET is missing in deploy\.env}
+      ConnectionStrings__DefaultConnection: *database
+      Jwt__SecretKey: "${JWT_SECRET:?JWT_SECRET is missing, copy deploy/.env.example to deploy/.env and fill it in}"
       Jwt__Issuer: ${JWT_ISSUER:-http://localhost:8080/}
       Jwt__Audience: ${JWT_AUDIENCE:-http://localhost:8080/}
       Gemini__ApiKey: ${GEMINI_API_KEY:-}
       Storage__UploadFolder: /data/uploads
       Security__DataProtectionKeysPath: /data/keys
-      # Behind a reverse proxy that terminates TLS, also set: ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      # true only behind Caddy: the app then reads the caller's address and the https scheme from the X-Forwarded-*
+      # headers (the rate limits are per client address, and the guest cookie is Secure only when the request is https).
+      # Safe because in that mode the app's port is bound to the loopback address and only Caddy can reach it.
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: ${FORWARDED_HEADERS:-false}
     ports:
-      - "${APP_PORT:-8080}:8080"
+      - "${APP_BIND:-0.0.0.0}:${APP_PORT:-8080}:8080"
     volumes:
       - uploads:/data/uploads
       - keys:/data/keys
+
+  caddy:
+    image: caddy:2
+    container_name: bookcart-caddy
+    profiles: ["https"]
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+      # Required in this mode: Caddy refuses an empty address, and Let's Encrypt uses it for expiry notices.
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # The certificates live here: keep this volume, or they are requested again (Let's Encrypt limits how often).
+      - caddy_data:/data
+      - caddy_config:/config
 
 volumes:
   sqldata:
   uploads:
   keys:
+  caddy_data:
+  caddy_config:

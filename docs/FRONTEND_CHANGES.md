@@ -85,7 +85,15 @@ npm start                               # in BookCart/ClientApp (ASPNETCORE_HTTP
 cd scripts/smoke && npm install && node smoke.js --expect-f1
 ```
 
-It seeds an admin and three books through the API, then checks: home and the self-hosted fonts, guest add to cart, search (with Enter), details page, registration (taken name flagged, new user), login merging the guest cart, cart page, checkout and My Orders, wishlist, a non-admin on `/admin/books`, logout, logged-out admin route, wrong password, off-site `returnUrl`, session expiry without a page reload, an expired token, admin list / hard refresh / edit form. It also reports console errors, HTTP statuses of 400 or more and external requests. Result on the F1 code: **21 of 21**; the only console errors are the two expected 401s. Against the untouched original code the same run finds the Enter-key search bug and loads fonts from Google and a CDN.
+Against a Docker deployment (`deploy/deploy.sh`, plain HTTP on port 8080) the backend and the site share one address, and the smoke admin is promoted with `make-admin.sh` instead of `sqlcmd` on LocalDB:
+
+```
+API=http://localhost:8080 WEB=http://localhost:8080 PROMOTE_ADMIN_CMD="bash $PWD/../../deploy/make-admin.sh smokeadmin" node smoke.js --expect-f1
+```
+
+`scripts/smoke/pages.js` is a second, shorter check: it opens every kind of page (home, login, register, the guarded pages, the cart, a book, search, an unknown address) and fails on a failed request, a console error, a Content-Security-Policy violation (the policy is report-only, so this is how violations are found before enforcing it) or a missing font. `WEB=http://localhost:8080 node pages.js` (the site needs a book).
+
+`smoke.js` seeds an admin and three books through the API, then checks: home and the self-hosted fonts, guest add to cart, search (with Enter), details page, registration (taken name flagged, new user), login merging the guest cart, cart page, checkout and My Orders, wishlist, a non-admin on `/admin/books`, logout, logged-out admin route, wrong password, off-site `returnUrl`, session expiry without a page reload, an expired token, admin list / hard refresh / edit form. It also reports console errors, HTTP statuses of 400 or more and external requests. Result on the F1 code: **21 of 21**; the only console errors are the two expected 401s. Against the untouched original code the same run finds the Enter-key search bug and loads fonts from Google and a CDN.
 
 ## F2: test infrastructure
 

@@ -267,6 +267,33 @@ How the two modes are chosen (written into `deploy/.env` by `deploy.sh`):
 
 **Check:** `docker compose -f deploy/docker-compose.yml --env-file <test env> config` is valid in both modes; `docker compose up -d --build` in HTTP-only mode brings up `sqlserver`, `migrate` (exits 0) and `app` (healthy).
 
+### Phase 2 results (done 2026-10-24)
+
+Files: `deploy/docker-compose.yml` (rewritten), `deploy/Caddyfile` (new) and `deploy/.env.example` (rewritten). The compose file above is the proposal; the file in the repo is the truth. All tests ran under a throwaway project name (`-p p2test`, its own volumes) and the stack, its volumes and its images were removed afterwards.
+
+Differences from the proposal, and why:
+- **SQL Server edition (needs your attention):** the image's default edition is **Developer, which is licensed for development and testing only**. The compose file now sets `MSSQL_PID: ${MSSQL_PID:-Express}`. Express is free for production (10 GB per database, about 1.4 GB of memory for data pages, 4 cores), which is plenty for this shop. Switching an existing volume from Developer to Express worked in place and kept the data (tested). Set `MSSQL_PID=Developer` (or a paid edition) in `deploy/.env` if you want something else.
+- **Migration connection string:** the `migrate` service passes it as `BOOKCART_EF_CONNECTION` (the bundle reads it through `BookDBContextFactory`; tested) instead of `command: ["--connection", ...]`, so the SA password is not on a command line. One YAML anchor (`x-database`) holds the connection string for both `migrate` and `app`.
+- **`caddy` waits for a healthy `app`** (`service_healthy`), now that the image has a health check.
+- **ACME email is required in HTTPS mode:** Caddy rejects `email` with an empty value (tested), so `deploy.sh` must ask for it and refuse a blank one. In plain HTTP mode it is unused. (A `${ACME_EMAIL:?}` check in the compose file would also fire in HTTP mode, so it is documented instead.)
+- The two required-secret messages are quoted in the YAML (an unquoted `: ` inside them is a YAML error), and they say "copy deploy/.env.example to deploy/.env" because `deploy.sh` does not exist before Phase 3.
+- `.env.example` has the new settings (`COMPOSE_PROFILES`, `APP_BIND`, `FORWARDED_HEADERS`, `DOMAIN`, `ACME_EMAIL`, `MSSQL_PID`, `BOOKCART_TAG`) and no longer has `SQL_PORT`: SQL Server is not published at all.
+
+Checked:
+- `docker compose config` is valid in both modes: plain HTTP gives `sqlserver`, `migrate` and `app` (app published on `0.0.0.0`); HTTPS gives those plus `caddy` on 80, 443 and 443/udp (app published on `127.0.0.1`). A missing `SA_PASSWORD` or `JWT_SECRET` stops with the clear message.
+- Plain HTTP: `up -d --build --wait` finished in 23 s with `migrate` exited 0 (**`--wait` accepts the one-shot service**, so `deploy.sh` can use it), SQL Server reported `Express Edition` and had no published port, no process showed the password on its command line, and `/health`, the pages, `/api/book`, the default cover, register, login and an authenticated call all worked.
+- A failing migration (a bad host injected through an override file) made `up` exit 1 with `service "migrate" didn't complete successfully: exit 1` while the **previous app stayed up and healthy**. (That test left the app's configuration unchanged. With a new image tag per release, which `deploy.sh` uses, Compose replaces the app container *before* it waits for `migrate`, so a failed migration did leave no app running. Phase 3 therefore runs the migration on its own first; see the Phase 3 results.)
+- `down` without `-v` followed by `up` kept the data (the registered user could log in) and the second migrate said "already up to date".
+- HTTPS with `DOMAIN=localhost` (Caddy's own local authority) and ports 80/443: the same stack switched from HTTP in place in 12 s; pages are 200 through Caddy, `http://` answers 308 to `https://`, responses are compressed (the home page 86.8 KB to 19.8 KB, zstd negotiated), the guest cookie is `secure` (so the forwarded headers work), HSTS is sent for a real host name (not for `localhost`, which ASP.NET always excludes), and **13 login attempts with a different spoofed `X-Forwarded-For` each still hit the rate limit after 10** (Caddy overwrites the header).
+- Not tested here: a real Let's Encrypt certificate (needs your domain and a reachable server).
+
+Notes for Phase 3:
+1. `deploy.sh` can wait with `docker compose up -d --wait`.
+2. **Switching from HTTPS back to plain HTTP leaves the `caddy` container running** (Compose ignores services whose profile is off). `deploy.sh` must stop it (`docker compose --profile https stop caddy`, or `--profile "*"` for `down`) when the profile is not `https`.
+3. Use `docker compose --profile "*" down` to stop everything regardless of mode.
+4. `container_name` is fixed (`bookcart-sql`, `bookcart-app`, `bookcart-caddy`), so only one BookCart stack can run per host; tests under another project name must not run next to a real one.
+5. **`scripts/release.bat` is broken until Phase 3**: it applies migrations from the host through the SQL port that the old compose file published and this one deliberately does not. Do not use it between Phase 2 and Phase 3.
+
 ## Phase 3: `deploy/deploy.sh`, the one command
 
 Behaviour, in order (bash, `set -euo pipefail`, run from anywhere):
@@ -291,6 +318,35 @@ Flags: `-y` for no prompts (needs an existing `.env`, for automation). `deploy.s
 
 **Check:** on a clean checkout with an empty Docker (no volumes): `./deploy/deploy.sh` (HTTP-only, `-y` after creating `.env`) ends healthy; running it a second time backs up, re-migrates (nothing to do) and ends healthy; register a user in the browser, then `./deploy/make-admin.sh <user>` and the admin menu appears.
 
+### Phase 3 results (done 2026-10-24)
+
+Files: `deploy/deploy.sh`, `deploy/backup.sh`, `deploy/make-admin.sh`, `deploy/lib.sh` (shared helpers, sourced by the other three), `.gitattributes` and `scripts/release.bat` (now a thin wrapper, as planned; the decision "keep it as a wrapper" is taken). All four scripts pass `bash -n` and `shellcheck -S style` (run from the `koalaman/shellcheck` image). All tests ran against a real stack under a throwaway project name (`p3test`) and everything was removed afterwards.
+
+What the scripts do, beyond the plan text:
+- `deploy.sh` flags: `-y` (never ask; needs an existing `deploy/.env`), `--pull` (fetch newer base images before building: off by default so a deploy is predictable and works offline), `-h`. It also tags the built images `latest`, so a later plain `docker compose up` uses the deployed release, and the old tags remain for a rollback.
+- First run: asks for a domain (blank = plain HTTP) and, for a domain, an e-mail (both validated, with retry), generates `SA_PASSWORD` (24 hex characters plus `Az1`, which satisfies SQL Server's rules) and `JWT_SECRET` (96 hex characters; hex rather than base64 so that no character can break the connection string or Compose), writes `deploy/.env` with `chmod 600` and prints the keep-a-copy reminder. `check_env` refuses characters in the two secrets that would break a connection string or a Compose file, and refuses HTTPS mode without a domain and an e-mail.
+- `backup.sh [name]`: `BACKUP ... WITH INIT, CHECKSUM`, then `RESTORE VERIFYONLY`, copy out, delete the copy inside the volume, keep the newest `BACKUP_KEEP` files (default 7). "No database yet" is a success. The restore procedure in its header comment was run exactly as written and works.
+- `make-admin.sh <username>`: the name is checked against `^[A-Za-z0-9_.@-]{1,50}$` before it goes near SQL; says "no such user", "already an administrator" or "now an administrator", and reminds the user to log in again (the role is in the login token).
+- `release.bat`: makes sure Docker runs (`ensure-docker.bat`), finds Git Bash (`BASH_EXE` overrides), maps `/y` to `-y`, runs `deploy/deploy.sh`, and pauses at the end unless `/y`.
+
+**Important change from the plan (a bug found while testing):** `deploy.sh` runs the migration on its own first (`docker compose run --rm --no-deps migrate`) and only then `docker compose up -d --wait`. `up` replaces the app container (new image tag) before it waits for `migrate`, so with `up` alone a failed migration left the old app stopped and a new one stuck in `Created`. Now a failed migration stops the deploy at step 4 with the migration output, exit code 1, and the running app untouched (tested by deleting the `Baseline` row from `__EFMigrationsHistory`, which makes the bundle try to create existing tables). The `migrate` service still runs a second time inside `up` as a dependency; it finds nothing to do.
+
+Checked:
+- Guard rails: `-y` without `deploy/.env`, an unknown flag, `make-admin.sh` with no argument, with an injection attempt, and without `deploy/.env` all stop with a clear message and exit code 1 or 2.
+- First deployment from nothing, plain HTTP: healthy in 50 s (cached build); no secret appears in the output; the second run said "No database yet", later runs took 40 to 50 s.
+- Admin flow: a user who does not exist is refused; after registering and `make-admin.sh`, a new login returns `"userTypeName":"Admin"`, `DELETE /api/book/...` is 404 (allowed) for the admin and 403 for a normal user; a repeat is "already an administrator".
+- Backups: a real backup (3.8 MB, verified); pruning with `BACKUP_KEEP=2` left only the two newest; the documented restore removed a user registered after the backup and kept the earlier users and their logins.
+- First run in HTTPS mode with `localhost`: bad domains (`http://shop.example.com/`, `SHOP LOCAL`) and bad e-mails were rejected, `LocalHost` was lowercased and accepted, the stack came up with Caddy on 443 (app on `127.0.0.1:8080`, `http://` redirects with 308). Editing `deploy/.env` back to plain HTTP and deploying again **removed the Caddy container** and the site answered on 8080 only.
+- Failures: a failed migration (above); a wrong `SA_PASSWORD` (the SQL container's health check keeps failing: after about 2.5 minutes the script prints SQL Server's log and a message pointing at `SA_PASSWORD`, exit 1, no password in the log); restoring the right password and deploying again recovered.
+- `scripts\release.bat /y` run from `cmd` (as a double-click would) deployed and exited 0.
+
+Bugs found and fixed while testing (all Windows or Compose behaviour, none of them visible on Linux): Git Bash rewrites Unix-looking paths, so `docker compose` and `git` are now run from inside `deploy/` with relative paths (this had also made the release tag end in `-local`); `shift` in `release.bat` changes `%0`, which broke `%~dp0` (the script folder is now captured first); and the failed-migration behaviour above.
+
+Notes:
+1. **The executable bit.** A Windows checkout cannot record it, so before committing the scripts run once: `git add deploy/*.sh && git update-index --chmod=+x deploy/deploy.sh deploy/backup.sh deploy/make-admin.sh`. Without it a Linux clone needs `bash deploy/deploy.sh`. (`lib.sh` is sourced, and `deploy.sh` calls `backup.sh` through `bash`, so only the three entry points matter.)
+2. Not tested here: a real Let's Encrypt certificate and a Linux host (everything ran on Windows with Git Bash and Docker Desktop; the scripts use no Windows-only commands, and shellcheck is clean).
+3. Rollback in practice: the previous images stay as `bookcart:<tag>`; to go back, deploy the previous code (`git checkout <old commit>`, then `deploy/deploy.sh`) and, if the schema changed, restore the backup taken before that update.
+
 ## Phase 4: Make sure the image really is the app (the F6/F7 checks, in Docker)
 
 Run against the stack from Phase 3, in HTTP-only mode:
@@ -300,6 +356,28 @@ Run against the stack from Phase 3, in HTTP-only mode:
 - The smoke test passes against it: `API=http://localhost:8080 WEB=http://localhost:8080 node scripts/smoke/smoke.js --expect-f1` (it needs `sqlcmd` on the machine to promote its admin; if that is awkward, use `make-admin.sh` with the smoke admin name beforehand).
 - Uploaded covers survive `docker compose up -d --build`: upload a cover as admin, redeploy, the cover is still served (volume `uploads`, written by the non-root user).
 - Guest cart survives a restart (the Data Protection keys are in the `keys` volume).
+
+### Phase 4 results (done 2026-10-24: all checks pass, no defect found in the image)
+
+Run against a stack created by `deploy.sh` (plain HTTP, clean database, a fresh `deploy/.env`), under a throwaway project name; the stack, volumes, `.env`, backups and images were removed afterwards.
+
+| Check | Result |
+|---|---|
+| Prerendered pages | `/`, `/login`, `/register` are served **byte for byte** as `index.html`, `login/index.html`, `register/index.html` from the image; their raw HTML (no JavaScript) holds the headings "Books", "Login" and "User Registration" and a filled `<app-root>`. `/wishlist`, `/checkout`, `/books/details/1` and `/admin/books` are byte for byte `index.csr.html` (an empty `<app-root></app-root>`). |
+| `verify-static.js` on `docker cp bookcart-app:/app/wwwroot` | 88 files, every reference resolves, no inline script or handler. |
+| Browser page check (new `scripts/smoke/pages.js`) | 9 page types (home, login, register, wishlist and checkout redirecting to login with a `returnUrl`, cart, a book's details, search, an unknown address): no failed request, no console error, **no Content-Security-Policy violation**, Roboto and Material Icons loaded on every page. The CSP header is the report-only one. So enforcing the policy (`Security:EnforceCsp=true`) would not break the site, which settles that open question for the Docker build. |
+| Browser smoke test (`scripts/smoke/smoke.js --expect-f1` against `http://localhost:8080`) | **25 of 25 passed** in 38 s: guest cart, search, details, registration, login merging the cart, checkout and My Orders, wishlist, the guards, wrong password, off-site `returnUrl`, session expiry, admin list, hard refresh and edit page. The only console errors are the two expected 401s; no external request. |
+| Uploaded covers survive redeploys | A real PNG uploaded as admin was served with the exact bytes uploaded (70 bytes, `image/png`); after `deploy.sh` (new image tag, new containers) and after `down` plus a new deploy it was still served; the file sits in the `uploads` volume owned by `app`; deleting the book returned 204 and the file was gone (404, no copy left in the volume). The default cover (`/Upload/Default_image.jpg`, from the image) is served too. |
+| Guest cart survives | A guest's cart (2 copies of a book) was intact after `docker restart bookcart-app` and after a full redeploy; the key file sits in the `keys` volume; a forged `bc_guest` cookie is treated as no guest (an empty cart, HTTP 200). |
+
+Changes made in this phase (small, outside the deployment files):
+- `scripts/smoke/smoke.js`: the step that makes the smoke admin an administrator can be replaced with `PROMOTE_ADMIN_CMD` (it defaulted to `sqlcmd` on LocalDB and still does). For Docker: `API=http://localhost:8080 WEB=http://localhost:8080 PROMOTE_ADMIN_CMD="bash <repo>/deploy/make-admin.sh smokeadmin" node smoke.js --expect-f1`. On Windows `cmd`, give the full path of Git's `bash.exe` (a plain `bash` may be WSL's). `docs/FRONTEND_CHANGES.md` describes both scripts.
+- `scripts/smoke/pages.js`: new, described above.
+
+Notes:
+1. The smoke test and `pages.js` need Chrome and `puppeteer-core` (`npm ci` in `scripts/smoke`). GitHub's `ubuntu-latest` runners have Chrome, so Phase 5 can run both against the stack in CI (about 40 s); set `CHROME_PATH` to `google-chrome` there, because the built-in default is the Windows path.
+2. `curl -o /dev/null -w %{size_download}` in Git Bash reports 0 bytes for a real response; compare against a saved file instead (this briefly looked like an empty cover).
+3. Nothing in the image needed fixing in this phase.
 
 ## Phase 5: CI proof that the stack starts
 

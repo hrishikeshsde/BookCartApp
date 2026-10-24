@@ -79,26 +79,57 @@ jobs:
       # Every file the pages and the CSS refer to exists, and no inline script or handler (the CSP would block it).
       - run: npm run verify:dist
 
-  container:
-    name: Container image
+  stack:
+    name: Docker stack (deploy, update, browser checks)
     needs: [backend, frontend]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          global-json-file: global.json
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      # Publishing builds the Angular client (npm ci + production build) and writes the image to a tar archive:
-      # nothing is pushed anywhere. Load it with `docker load -i bookcart.tar`.
-      - name: Build image archive
-        run: >-
-          dotnet publish BookCart/BookCart.csproj -c Release --os linux --arch x64 -t:PublishContainer
-          -p:ContainerArchiveOutputPath=${{ github.workspace }}/bookcart.tar
-      - uses: actions/upload-artifact@v4
-        with:
-          name: bookcart-image
-          path: bookcart.tar
-          retention-days: 7
+      # Nothing here is pushed anywhere: the job builds the two images from the Dockerfile, starts the stack exactly as
+      # a server would (deploy/deploy.sh), and then checks it. The first run has no deploy/.env, so the script creates
+      # one (plain HTTP on port 8080, generated secrets): the empty line answers its "domain" question.
+      - name: Deploy (first run)
+        run: printf '\n' | bash deploy/deploy.sh
+      - name: Check the deployment
+        run: bash deploy/verify.sh
+      # The update path of a real server: the database exists now, so this backs it up, applies nothing and replaces
+      # the containers with a new release.
+      - name: Deploy again (update)
+        run: bash deploy/deploy.sh -y
+      - name: The update made a verified backup
+        run: ls -l deploy/backups/BookDB_*.bak
+      - name: Check the deployment again
+        run: bash deploy/verify.sh
+      - name: Find Chrome
+        run: |
+          chrome=$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)
+          test -n "$chrome"
+          echo "CHROME_PATH=$chrome" >> "$GITHUB_ENV"
+      - name: Install the browser checks
+        working-directory: scripts/smoke
+        run: npm ci
+      # A Chrome click-through of the deployed site (guest cart, registration, login, checkout, wishlist, admin). The
+      # smoke admin is made an administrator with deploy/make-admin.sh, which is the way a real owner does it.
+      - name: Browser smoke test
+        working-directory: scripts/smoke
+        env:
+          API: http://localhost:8080
+          WEB: http://localhost:8080
+          PROMOTE_ADMIN_CMD: bash ${{ github.workspace }}/deploy/make-admin.sh smokeadmin
+        run: node smoke.js --expect-f1
+      # Failed requests, console errors, Content-Security-Policy violations and missing fonts on every kind of page.
+      - name: Page checks
+        working-directory: scripts/smoke
+        env:
+          WEB: http://localhost:8080
+        run: node pages.js
+      - name: Logs of the stack
+        if: failure()
+        run: docker compose --env-file deploy/.env -f deploy/docker-compose.yml --profile '*' logs --no-color --tail 200 || true
+      - name: Stop the stack and delete its data
+        if: always()
+        run: docker compose --env-file deploy/.env -f deploy/docker-compose.yml --profile '*' down -v || true

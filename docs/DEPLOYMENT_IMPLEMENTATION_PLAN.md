@@ -422,6 +422,26 @@ Replace the "Container image" job with a job like this (it runs on `ubuntu-lates
 
 **Check:** the job is green on the branch; temporarily break something (for example flatten `media/` again) and see it go red.
 
+### Phase 5 results (done 2026-10-25)
+
+Files: `.github/workflows/ci.yml` (the `container` job is replaced by a `stack` job; the `backend` and `frontend` jobs are untouched), `deploy/verify.sh` (new) and `.gitignore` (one line, `deploy/.verify-tmp/`).
+
+What was verified, and what was not:
+- `actionlint` (which also runs shellcheck on every `run:` block) passes on the workflow, and `shellcheck -S style` passes on `verify.sh`.
+- **The job was simulated locally**: the same commands in the same order, from a state with no `deploy/.env` and no containers, under a throwaway project name. It passed: first deploy, `verify.sh` (all checks), second deploy with a verified 3.6 MB backup, `verify.sh` again, the browser smoke test (**25 of 25**) and the page checks (no failed request, console error or CSP violation, fonts loaded). 3 min 35 s with a warm Docker cache.
+- **The checks were shown to fail**: deleting the prerendered `login/index.html` from the running container fails `verify.sh` (`/login is not login/index.html`); additionally deleting the font file named by the CSS fails it on `verify-static` and on the font request (404); stopping the app fails 22 checks. Every one exits 1.
+- **Not verified: an actual GitHub Actions run.** That needs a push. Differences from this PC that could matter there: a cold Docker cache (the first build takes several minutes instead of seconds, which is why the job has `timeout-minutes: 30`), the Chrome path (the job finds `google-chrome` with `command -v` and exports `CHROME_PATH`; the scripts' built-in default is the Windows path), and the Compose version on the runner (the scripts use `up --wait`, `--wait-timeout` and `run --no-deps`, all available in any recent Compose v2). If the first run fails, the logs step prints the last 200 lines of every container.
+
+How the job differs from the plan's sketch:
+- It uses **`deploy.sh` itself** (`printf '\n' | bash deploy/deploy.sh`: the empty line answers the domain question, so the real first-run path creates `deploy/.env` with generated secrets), instead of writing a throwaway `.env` by hand. So CI exercises what a server runs: the build of both images, the backup step, the standalone migration, `up --wait`.
+- It then runs **`deploy.sh -y` a second time**, which is the update path of a server (the database exists: a verified backup is taken, the migration finds nothing to do, the containers are replaced), and asserts that the backup file exists.
+- The plan's curl checks became **`deploy/verify.sh`** (new): health and API answers, every page address serving the right file of the build (compared byte for byte with the files copied out of the container), the build's own `verify-static.js` on those files, a font named by the CSS (it fails loudly if no stylesheet or font is found: the "refine it" note in the sketch), the security headers, and that SQL Server has no published port (in HTTPS mode also that the app is bound to 127.0.0.1 and Caddy runs). It changes nothing, takes the base URL as an optional argument and works on a real server too (`deploy/verify.sh https://shop.example.com`), which is why it lives in `deploy/` and not in the workflow.
+- The browser checks are included: `smoke.js --expect-f1` and `pages.js` (Phase 4), with the smoke admin promoted by `deploy/make-admin.sh` through `PROMOTE_ADMIN_CMD`.
+- The old `docker save`/tar artifact (the `bookcart-image` upload) is gone, as decided. Nothing is pushed anywhere. If you want an image as a build artifact later, add `docker save bookcart:latest -o bookcart.tar` and `upload-artifact` after the deploy step.
+- No Docker layer cache is configured (a cache would need `docker/build-push-action` or `buildx bake` with a `gha` cache, which `docker compose build` does not use by default). Add it only if the job's duration becomes a problem.
+
+Notes for Phase 6: the README and `CLAUDE.md` still say CI "builds the image archive"; `docs/FRONTEND_CHANGES.md` follow-up F7-5 ("CI checks the publish layout") is now covered by `verify-static` running on the real container as well as on the build.
+
 ## Phase 6: Documentation and tidy-up
 
 - `README.md`: replace the "Container" and release sections with the new flow: requirements (a Linux server with Docker, a domain pointing at it, ports 80 and 443 open), the three commands (clone, `./deploy/deploy.sh`, `./deploy/make-admin.sh`), update, backup and restore, rollback (restore the backup, `BOOKCART_TAG=<old tag> docker compose up -d app`), where the data lives (volumes `sqldata`, `uploads`, `keys`, `caddy_data`), and what to keep a copy of (`deploy/.env`).

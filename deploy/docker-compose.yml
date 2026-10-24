@@ -37,8 +37,10 @@ services:
       retries: 12
       start_period: 20s
 
-  # Applies the EF Core migrations, then exits (0 when the database is up to date, 1 on any failure). The app starts
-  # only after it succeeded, so a failed migration leaves the previous app running instead of a half-upgraded one.
+  # Applies the EF Core migrations, then exits (0 when the database is up to date, 1 on any failure). The new app
+  # starts only after it succeeded, so it never runs against a half-migrated database. Note that "docker compose up"
+  # replaces the app container before it waits for this one, so deploy/deploy.sh runs the migration on its own first:
+  # that is what leaves the running version untouched when a migration fails.
   migrate:
     build:
       context: ..

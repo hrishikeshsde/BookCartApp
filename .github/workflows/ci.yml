@@ -4,6 +4,8 @@ on:
   push:
     branches: [master]
   pull_request:
+  # Lets the owner run CI by hand from the Actions tab (once this workflow file is on master).
+  workflow_dispatch:
 
 permissions:
   contents: read

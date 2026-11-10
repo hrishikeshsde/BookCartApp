@@ -1,6 +1,7 @@
 // Browser smoke test for BookCart (see docs/FRONTEND_CHANGES.md). Needs: the backend on https://localhost:7073 running
 // against the LocalDB database BookDB_Dev (it promotes the smoke admin there with sqlcmd), the Angular dev server on
-// https://localhost:53424 (override with WEB=...), and Chrome (override with CHROME_PATH=...).
+// https://localhost:53424 (override with WEB=...), and Chrome (override with CHROME_PATH=...). To run it against another
+// deployment set API and WEB (the same address for the Docker stack) and PROMOTE_ADMIN_CMD (see seed()).
 // Usage: cd scripts/smoke && npm install && node smoke.js [--expect-f1]
 //   --expect-f1  treat the "known issue" checks as required (after the F1 security phase they must pass)
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -43,7 +44,11 @@ const json = (o) => ({ method: 'POST', headers: { 'Content-Type': 'application/j
 async function seed() {
   const reg = await api('/api/user', json({ firstName: 'Smoke', lastName: 'Admin', username: ADMIN.username, password: ADMIN.password, confirmPassword: ADMIN.password, gender: 'Male' }));
   if (![200, 409].includes(reg.status)) throw new Error('register admin: ' + reg.status);
-  execSync(`sqlcmd -S "(localdb)\\MSSQLLocalDB" -d BookDB_Dev -E -C -Q "UPDATE UserMaster SET UserTypeID = 1 WHERE Username = '${ADMIN.username}'"`, { stdio: 'ignore' });
+  // Making the smoke admin an administrator is a database change. The default does it on the local development database;
+  // PROMOTE_ADMIN_CMD replaces it, for example against a Docker deployment: PROMOTE_ADMIN_CMD="bash /path/to/deploy/make-admin.sh smokeadmin"
+  const promote = process.env.PROMOTE_ADMIN_CMD ||
+    `sqlcmd -S "(localdb)\\MSSQLLocalDB" -d BookDB_Dev -E -C -Q "UPDATE UserMaster SET UserTypeID = 1 WHERE Username = '${ADMIN.username}'"`;
+  execSync(promote, { stdio: 'ignore' });
   const login = await api('/api/login', json(ADMIN));
   if (login.status !== 200) throw new Error('login admin: ' + login.status + ' ' + JSON.stringify(login.body));
   const token = login.body.token;

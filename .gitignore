@@ -237,6 +237,7 @@ BookCart/wwwroot/Upload/*
 # Production deployment: generated secrets, database backups and published binaries
 deploy/.env
 deploy/backups/
+deploy/.verify-tmp/
 artifacts/
 
 # Smoke test dependencies

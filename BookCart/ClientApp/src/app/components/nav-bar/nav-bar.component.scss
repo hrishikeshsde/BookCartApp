@@ -4,11 +4,12 @@
   display: block;
 }
 
-// The toolbar is the primary colour; what sits on it (links, icons, badges) takes the matching "on" colours. Its height
+// The toolbar is the violet-to-orange brand band (--bc-brand-gradient); what sits on it (links, icons, badges) takes the matching "on" colours. Its height
 // is whatever its content needs (one row wide, two rows narrow).
 mat-toolbar {
-  --mat-toolbar-container-background-color: var(--mat-sys-primary);
+  --mat-toolbar-container-background-color: transparent;
   --mat-toolbar-container-text-color: var(--mat-sys-on-primary);
+  background: var(--bc-brand-gradient);
   --mat-toolbar-standard-height: auto;
   --mat-toolbar-mobile-height: auto;
   --mat-button-text-label-text-color: var(--mat-sys-on-primary);

@@ -1,0 +1,40 @@
+# What the Docker build never needs. Keeps the build context small, and keeps secrets and local data out of the images.
+
+# Build output and dependencies (the image builds its own)
+**/node_modules
+**/bin
+**/obj
+**/out-tsc
+BookCart/ClientApp/dist
+BookCart/ClientApp/.angular
+
+# Version control, CI, editor and tool folders
+.git
+.github
+.claude
+.vs
+**/.vscode
+
+# Secrets and local data. The whole deploy/ folder (compose file, scripts, .env, backups) is not part of the image.
+deploy
+artifacts
+**/.env
+**/.env.*
+**/*.log
+**/*.bak
+**/*.mdf
+**/*.ldf
+
+# Uploaded book covers exist on a dev machine (they are git-ignored). Only the default cover belongs in the image.
+BookCart/wwwroot/Upload/*
+!BookCart/wwwroot/Upload/Default_image.jpg
+
+# Not needed to build the app
+BookCart.Tests
+BookCart.slnx
+docs
+scripts
+DBScript
+*.md
+Dockerfile
+.dockerignore

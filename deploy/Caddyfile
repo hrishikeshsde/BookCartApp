@@ -1,0 +1,14 @@
+# HTTPS in front of the app. DOMAIN and ACME_EMAIL come from deploy/.env through the caddy service's environment.
+#
+# For a real domain Caddy asks Let's Encrypt for a certificate by itself and renews it: the domain's DNS must point at
+# this server and ports 80 and 443 must be reachable from the internet. With DOMAIN=localhost Caddy uses its own local
+# certificate authority instead (the browser warns once), which is how this file is tried out on a development PC.
+{
+	# Required: an empty value is a Caddyfile error. Let's Encrypt writes here before a certificate expires.
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:8080
+}

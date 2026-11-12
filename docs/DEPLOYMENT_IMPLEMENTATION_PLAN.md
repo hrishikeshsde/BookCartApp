@@ -16,8 +16,8 @@ This document merges two earlier ones: the Docker plan (written first, and mostl
 | D2 | Compose file (SQL Server, migrate, app, Caddy) | **Done** 2026-10-24 |
 | D3 | `deploy.sh`, `backup.sh`, `make-admin.sh`, the `release.bat` wrapper | **Done** 2026-10-24 |
 | D4 | The image really is the app (pages, fonts, uploads, guest cart, browser checks) | **Done** 2026-10-24 |
-| D5 | A CI job that deploys the stack and checks it | **Done** 2026-10-25 (committed; its first run on GitHub is still to be confirmed) |
-| D6 | Documentation and tidy-up, **both targets** | Not started. The Docker half can start now; the Azure half is finished after A7 |
+| D5 | A CI job that deploys the stack and checks it | **Done** 2026-10-25, **confirmed on GitHub** 2026-11-10 (the pull-request run #19 and the merge run #20 were green; the `stack` job took 2 min 54 s on a cold cache) |
+| D6 | Documentation and tidy-up, **both targets** | **Docker half done** 2026-11-10 (README, `CLAUDE.md`, F7-5 closed, executable bits). The Azure half is finished after A7 |
 | D7 | Optional: a limited SQL login for the Docker target | Not started, optional |
 | A0 to A10 | Azure: spike, Bicep, GitHub trust, database access, image publishing, release pipeline, app changes, backups and runbooks, monitoring, domain and hardening, optional scale-out | Not started |
 
@@ -127,7 +127,7 @@ Shared building blocks (built once in Part D, reused by Part A):
 | `scripts/smoke/smoke.js` (`PROMOTE_ADMIN_CMD`), `scripts/smoke/pages.js` | D | browser checks usable against any deployment | done (D4) |
 | `deploy/verify.sh`, `.gitignore` (`deploy/.verify-tmp/`) | D | the post-deployment self-check | done (D5) |
 | `.github/workflows/ci.yml` | D | the stack job replaced the tar job | done (D5) |
-| `README.md`, `CLAUDE.md`, `docs/FRONTEND_CHANGES.md` | D | describe the real flow; close F7-5 | D6 |
+| `README.md`, `CLAUDE.md`, `docs/FRONTEND_CHANGES.md` | D | describe the real flow; close F7-5 | done (D6, Docker half) |
 | `infra/main.bicep`, `infra/modules/*.bicep`, `infra/parameters/*.bicepparam` | A | the whole Azure environment | A1 |
 | `infra/bootstrap.sh` (or `.ps1`) | A | the one-time resource group, deployment identity and trust in GitHub | A2 |
 | `.github/workflows/infra.yml` | A | what-if on pull requests, deploy on demand | A2 |
@@ -578,6 +578,25 @@ One documentation phase for the whole deployment story. **The Docker half can be
 
 **Check:** a person who has never seen the repo can deploy with Docker from the README alone (try it on a fresh VM or a clean Docker Desktop). After A7, the same for an Azure release, using the runbooks.
 
+#### D6 results (Docker half, done 2026-11-10)
+
+Files: `README.md`, `CLAUDE.md`, `docs/FRONTEND_CHANGES.md`, and the file modes of four scripts. No code, workflow or Compose change.
+
+What changed:
+- `README.md`: the Visual Studio prerequisite (2026); the one-click scripts table (the `release.bat` row and its two stale paragraphs replaced); the old "Container" section replaced by **"Deploying with Docker"**: what you need, the three commands (`deploy/deploy.sh` or `scripts\release.bat`, `deploy/make-admin.sh <user>`, `deploy/verify.sh`), update, backup and restore, rollback as tested in D3, where the data lives, keeping a copy of `deploy/.env`, stop, HTTP versus HTTPS, the Content-Security-Policy statement, and a "Running the image yourself" subsection (the two Dockerfile targets, the environment variable table); the CI sentence now describes the stack job; a pointer to Part A for Azure.
+- `CLAUDE.md`: the Visual Studio line, the stale `release.bat` and `-t:PublishContainer` lines (replaced by one Docker deployment bullet that names the Dockerfile targets, the scripts, the Compose services, and that `docker build` runs the NuGet audit), a line about `pages.js`, and the CI sentence (the stack job and the three triggers).
+- `docs/FRONTEND_CHANGES.md`: follow-up **F7-5 closed**, with a pointer to this plan (D5).
+
+Found while doing it:
+- **None of the deploy scripts was executable in git** (all five were mode 100644, on `master` too), so `./deploy/deploy.sh` would have answered "Permission denied" on a Linux clone. Fixed with `git update-index --chmod=+x` on `deploy.sh`, `make-admin.sh`, `verify.sh` and `backup.sh` (`lib.sh` is only sourced). **This is a staged mode change that still has to be committed.** CI never noticed because it calls the scripts with `bash`. The README also tells readers to use `bash deploy/deploy.sh` if they see "Permission denied".
+- **The README was damaged before D6**: the development-scripts table had lost its backslashes (`scriptsdev-start-all.bat`) and the `release.bat` row held a stray carriage-return character. The rows were rewritten, and all docs were scanned: no control characters remain in the README, `CLAUDE.md`, `FRONTEND_CHANGES.md`, this plan or the architecture guide.
+
+Decided here:
+- `Security:EnforceCsp` for the Docker target: **left report-only and documented** (the README says it is safe to enforce and how). Passing it through the Compose file is not done; it is one line plus an `.env.example` entry if you want it.
+- `ContainerRepository` and its comment in `BookCart/BookCart.csproj`: **left in place** (harmless; removing it needs the owner's agreement).
+
+Checked: every flag and command the README names exists (`deploy.sh -y`, `--pull`, `-h`; `verify.sh [url]`; `backup.sh [name]`), the backup count (7) and the standalone migration are in the scripts, every path it links exists, and the docs hold no stray control characters. **Not done:** the "stranger test" on a fresh VM or a clean Docker Desktop (the README was checked against the code and against D3 to D5, not followed by a person). The Azure half of D6 waits for A7.
+
 ### D7 (optional): limited SQL login
 
 The `migrate` service keeps `sa` (it needs DDL rights). The `app` should run as a login that has only `db_datareader` and `db_datawriter` on `BookDB`: after the migrate step, `deploy.sh` runs one idempotent `CREATE LOGIN/USER ... ; ALTER ROLE ...` script with a generated `APP_DB_PASSWORD` in `.env`, and the app's connection string uses it. Do this only if the server is shared or exposed; for a single-purpose host it adds a moving part for little gain. (Part A gets the same least-privilege result by design: the app's identity there has only read and write rights, A3.)
@@ -872,10 +891,10 @@ Specific to Part D: a container registry (the server builds from source: that is
 
 ## 7. Order and effort
 
-**Done:** D0 to D5 (about two working days).
+**Done:** D0 to D5 and the Docker half of D6 (about two and a half working days).
 
 **Next, in this order:**
-1. **D6, the Docker half** (about half a day): the documentation is stale today.
+1. ~~D6, the Docker half~~ **done 2026-11-10.**
 2. **A0**, the Azure spike (about 1 day; it can change later A phases).
 3. **A1 to A5** (about 1.5, 1, 1, 1 and 2 days; A4 is now a day because it also changes the stack job), then **A6** (about 1 day), then **A7 to A9** (about 1, 1 and 0.5 days), and the **Azure half of D6** together with A7 (about half a day).
 

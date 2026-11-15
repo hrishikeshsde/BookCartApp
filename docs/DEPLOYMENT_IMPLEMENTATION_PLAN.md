@@ -55,14 +55,16 @@ Assumptions made without asking (change them if wrong): CI/CD is **GitHub Action
 
 ### Still open (defaults in bold; none of them blocks A0)
 
-1. **Region:** **the Azure region closest to your customers** (for customers in India, Central India or South India). It also decides which App Service tiers are offered; A0 checks the chosen SKU is available there.
+Answered 2026-11-13, besides items 1, 7 and 8 below: **no Azure subscription exists yet**; the account will be an **Azure free account** (USD 200 credit, 30 days, spending limit on); the **A0 spike may use the free credit only**; the CI triggers stay as they are (push to `master`, pull request, manual). The step-by-step sign-up guide and spike commands are in `docs/AZURE_SIGNUP_AND_A0_RUNBOOK.md`. **Risk found while preparing it:** Microsoft says free-trial subscriptions cannot request quota increases and a new subscription can have an App Service limit of 0 for a SKU, so S1 (needed for slots) may be refused; the runbook's step 1 says what to try and that upgrading to pay-as-you-go (which removes the spending limit) is the owner's decision.
+
+1. **Region:** **decided 2026-11-13: Central India** (South India is the fallback if A0 finds S1 unavailable or without quota). It also decides which App Service tiers are offered; A0 checks the chosen SKU is available there.
 2. **App Service tier:** **Standard S1 (Linux)**. Slots need Standard or higher; Basic cannot do the approved-swap flow. Premium v3 (P0v3 and up) if you later need more memory or zone redundancy.
 3. **Production database tier:** **Standard S0**, scaled up when needed. **Staging database: Basic.** (The free tier is for development only: no SLA, and it auto-pauses, which makes test runs flaky.)
 4. **Database backups:** point-in-time restore kept **14 days** (7 is the default, up to 35), backup storage **geo-redundant**, long-term retention **weekly for 4 weeks, monthly for 12 months**.
 5. **Database login:** **Microsoft Entra only (no SQL password anywhere)**. The app uses a managed identity. Fallback if the tenant blocks it: SQL authentication with the password in Key Vault.
 6. **Who approves a production release:** **you** (a required reviewer on the GitHub `production` environment). Add people later.
-7. **Domain:** **a custom domain with an App Service managed certificate** (free). Until then the `azurewebsites.net` address works.
-8. **Alert recipient and monthly budget:** **your e-mail**; a budget alert at an amount you choose.
+7. **Domain:** **decided 2026-11-13: not yet; use the `azurewebsites.net` address.** A custom domain with an App Service managed certificate (free) is A9.
+8. **Alert recipient and monthly budget:** **your e-mail**; **budget amount decided after the A0 spike** (2026-11-13), from the measured cost.
 9. **Scale-out phase (A10):** **later, only when you need a second instance.**
 10. **`Security:EnforceCsp`:** the policy is report-only today. D4 showed the built site produces no violations, so enforcing it is safe. Default: **enforce it in Azure staging first (A1), decide for Azure production in A9, and for the Docker target in D6** (the Compose file does not pass the setting through yet; that is one line).
 

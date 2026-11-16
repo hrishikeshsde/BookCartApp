@@ -19,7 +19,7 @@ This document merges two earlier ones: the Docker plan (written first, and mostl
 | D5 | A CI job that deploys the stack and checks it | **Done** 2026-10-25, **confirmed on GitHub** 2026-11-10 (the pull-request run #19 and the merge run #20 were green; the `stack` job took 2 min 54 s on a cold cache) |
 | D6 | Documentation and tidy-up, **both targets** | **Docker half done** 2026-11-10 (README, `CLAUDE.md`, F7-5 closed, executable bits); follow-up 2026-11-15 (`ContainerRepository` removed, `ENFORCE_CSP`). The Azure half is **skipped** (2026-11-16: `docs/RUNBOOKS.md` from A7 and one README line replace it) |
 | D7 | Optional: a limited SQL login for the Docker target | Not started, optional |
-| A0 to A8 | Azure free tier: the by-hand first deployment, Bicep, GitHub trust, database access, image publishing, release and rollback, trimmed backups and runbook, trimmed monitoring | Not started. **Rescoped 2026-11-16 to zero cost** (A6, A9, A10 skipped; A7, A8 trimmed). The `infra/` draft of 2026-11-15 was written for the paid design and is rewritten in A1 |
+| A0 to A8 | Azure free tier: the by-hand first deployment, Bicep, GitHub trust, database access, image publishing, release and rollback, trimmed backups and runbook, trimmed monitoring | **A4 done 2026-11-16** (confirmed on GitHub); the rest not started (the Microsoft account sign-up is blocked for now). **Rescoped 2026-11-16 to zero cost** (A6, A9, A10 skipped; A7, A8 trimmed). The `infra/` draft of 2026-11-15 was written for the paid design and is rewritten in A1 |
 
 ## 2. Requirement and decisions
 
@@ -776,7 +776,7 @@ On `master`, after its checks pass, the CI **`stack` job** pushes **the very ima
 
 **Check:** the SHA tag exists on `ghcr.io`; the pushed digest is the one the stack job ran; a pull-request run pushes nothing.
 
-#### A4 results (implemented 2026-11-16; the GitHub check waits for the first merge to master)
+#### A4 results (done 2026-11-16: implemented, checked locally, and confirmed on GitHub)
 
 Files: `.github/workflows/ci.yml` (the `stack` job), `docs/AZURE_SIGNUP_AND_A0_RUNBOOK.md` (step 1). No application or Dockerfile change.
 
@@ -793,7 +793,7 @@ Checked locally on 2026-11-16:
 Found while doing it:
 - **The first push of a package decides its owner.** A package created by `docker push` from a PC is not connected to the repository, and the workflow's later pushes are refused. So the A0 runbook no longer pushes from the PC: A0 uses the image CI published. New packages are **private**; make both public once (A0 step 1), because the free web app pulls without credentials.
 
-Not checked yet: the real run on GitHub. After the next merge to `master`: the stack job is green, both packages exist with the commit tag, the summary shows the digests, and the pull-request run before it published nothing.
+**Confirmed on GitHub (2026-11-16):** pull-request run #23 (`54bc9b3`, https://github.com/hrishikeshsde/BookCartApp/actions/runs/43846112642): stack job green, "Find the tested images" and "Scan the images" passed, **"Publish" skipped**. Merge run #24 on `master` (`f1aa3dc`, https://github.com/hrishikeshsde/BookCartApp/actions/runs/43846216209): stack job green in about 3 minutes, **"Publish" succeeded**. Both packages are public: asked anonymously, `ghcr.io/hrishikeshsde/bookcart:f1aa3dc8ec095a1eee586851394dc10339fff55e` resolves to `sha256:75c4458572d1c70b71548b7297bd8c4c0275e62ef2441fc0721aa9418eddf2a9` and `bookcart-migrate` to `sha256:07449a3a2c9bb51ccf8714d859630e0a960b9b71ce3aea64edfcd85d7daeaf82`, and the owner pulled both without a login. Those are the digests `release.yml` (A5) will deploy.
 
 ### A5: The release and the rollback
 

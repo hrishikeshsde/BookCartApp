@@ -136,7 +136,7 @@ Shared building blocks (built once in Part D, reused by Part A):
 | `.github/workflows/ci.yml` | D | the stack job replaced the tar job | done (D5) |
 | `README.md`, `CLAUDE.md`, `docs/FRONTEND_CHANGES.md` | D | describe the real flow; close F7-5 | done (D6, Docker half) |
 | `infra/main.bicep`, `infra/modules/*.bicep`, `infra/parameters/*.bicepparam`, `infra/README.md` | A | the free Azure environment (the 2026-11-15 draft for the paid design is rewritten) | A1 |
-| `infra/bootstrap.sh` | A | the one-time resource group, pipeline identity and trust in GitHub | A2 |
+| `infra/bootstrap.bicep` | A | the one-time pipeline identity, its trust in GitHub and its role on the group (run by you) | A1 (prep written 2026-11-16) |
 | `.github/workflows/infra.yml` | A | what-if, then deploy after approval (manual) | A2 |
 | `.github/workflows/ci.yml` | A | the stack job scans and pushes the images it tested on `master` and calls `release.yml` | A4 |
 | `.github/workflows/release.yml` | A | reusable: approval, migrate, switch the image, check, roll back on failure | A5 |
@@ -709,7 +709,7 @@ GitHub side: the repository is public, so Actions minutes, environments with req
 
 ### A0: The first deployment by hand (learn each piece, prove the free assumptions)
 
-Because everything is free, there is **no throwaway spike**: you build the real environment once by hand with the Azure CLI, which is the best way to learn what each piece does. A1 then deletes it and recreates it from Bicep, which proves the infrastructure code. The commands are in `docs/AZURE_SIGNUP_AND_A0_RUNBOOK.md` (rewritten for this design together with A1).
+Because everything is free, there is **no throwaway spike**: you build the real environment once by hand with the Azure CLI, which is the best way to learn what each piece does. A1 then deletes it and recreates it from Bicep, which proves the infrastructure code. The commands are in `docs/AZURE_SIGNUP_AND_A0_RUNBOOK.md` (rewritten for the free design on 2026-11-16). The A0 resource group stays until A1 is ready, then is deleted (one free database per subscription).
 
 1. **F1 takes a container:** an F1 Linux plan in Central India runs the BookCart image (fallback region South India).
 2. **The image from `ghcr.io`:** push it once from your PC, make the package public, and point the web app at it.
@@ -725,7 +725,11 @@ Because everything is free, there is **no throwaway spike**: you build the real 
 
 ### A1: Infrastructure as code (Bicep, free resources only)
 
-`infra/main.bicep` (one resource group) creates:
+**Prep status (2026-11-16): written offline in `infra/` for the free design** (`bootstrap.bicep`, `main.bicep`, `modules/webapp.bicep`, `modules/sql.bicep`, `modules/budget.bicep`, `parameters/production.bicepparam`, `README.md`). The free-tier database and budget property names were checked on Microsoft Learn. **Not compiled yet** (no Bicep CLI on the PC) and not deployed: A1 is done only when the Check below passes on Azure, after A0.
+
+**Once, by you, before the first run:** delete the A0 resource group (**only one free database is allowed per subscription**), create `rg-bookcart`, and deploy `infra/bootstrap.bicep`. It creates the **pipeline identity** with its federated credential for `repo:<owner>/BookCartApp:environment:production` and **Contributor** on the group. It is kept out of `main.bicep` because creating a role assignment needs Owner rights, which the pipeline does not have; it was A2's `bootstrap.sh` in the first version of this plan.
+
+`infra/main.bicep` (the same resource group) creates:
 
 1. **App identity:** a user-assigned managed identity (the database user is created for it in A3).
 2. **App Service:** a Free F1 Linux plan; the web app with the container image (a parameter), `httpsOnly`, minimum TLS 1.2, FTPS off, basic publishing credentials off (FTP and SCM), `clientAffinityEnabled: false`; no Always On and no health check path (see the limits table).
@@ -746,13 +750,13 @@ App settings (all set by Bicep, so a re-run never loses one):
 | `Storage__UploadFolder`, `Security__DataProtectionKeysPath` | `/home/data/uploads`, `/home/data/keys` |
 | `Security__EnforceCsp` | `true` (D4 found no violations; one setting to change if something breaks) |
 
-The image is a parameter. The infra workflow (A2) reads the image the app currently runs and passes it, so an infrastructure run never rolls the app back.
+The image is a parameter. The infra workflow (A2) reads the image the app currently runs and passes it, so an infrastructure run never rolls the app back. The parameter file reads the image, `JWT_SECRET`, `GEMINI_API_KEY` and the budget e-mail from environment variables (`readEnvironmentVariable`), so none of them is in the repository.
 
 **Check:** `what-if` is clean; a deployment into an empty resource group succeeds and the site works after A3 and A5; a second run changes nothing; no secret is in the repository or an output; *Cost analysis* still shows 0.00.
 
 ### A2: Trust between GitHub and Azure
 
-1. **Bootstrap (once, by you):** `infra/bootstrap.sh` creates the resource group, the **pipeline identity** (a user-assigned managed identity), its federated credential for `repo:<owner>/BookCartApp:environment:production`, and **Contributor** on the resource group (nothing more is needed: the free design has no Azure role assignments of its own).
+1. **The Azure side** is already in place from A1 (`infra/bootstrap.bicep`: the pipeline identity, its federated credential, Contributor on the group).
 2. **GitHub:** the environment `production` with **you as required reviewer**, deployments only from `master`; environment secrets `JWT_SECRET` (and optionally `GEMINI_API_KEY`); variables for the client, tenant and subscription ids and the resource group (identifiers, not secrets); branch protection on `master` with the three checks.
 3. **`infra.yml`** (manual): `what-if`, then, in the `production` environment (so after your approval), the deployment.
 
@@ -849,7 +853,7 @@ Specific to Part D: a container registry (the server builds from source: that is
 
 **Next, in this order** (estimates, not measurements):
 
-1. Rewrite the A1 Bicep draft and the A0 runbook for the free design (offline, about half a day), then compile the Bicep (needs the Bicep CLI installed).
+1. ~~Rewrite the A1 Bicep draft and the A0 runbook for the free design~~ **written 2026-11-16**; still to do: compile the Bicep once the Bicep CLI is installed.
 2. Sign up for Azure (the 30-day clock starts here), then **A0** by hand (about 1 day).
 3. **A1** (about 1 day), **A2** (1), **A3** (1), **A4** (0.5), **A5** (1.5).
 4. **A7** and **A8**, trimmed (about half a day each).

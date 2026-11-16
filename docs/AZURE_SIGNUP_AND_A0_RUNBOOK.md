@@ -64,21 +64,22 @@ done
 export RG=rg-bookcart-a0 LOC=centralindia SUF=$RANDOM
 export APP=app-bookcart-$SUF SQLSRV=sql-bookcart-$SUF
 export OWNER=<your GitHub user, lower case>
-export IMAGE=ghcr.io/$OWNER/bookcart:a0 MIGRATE_IMAGE=ghcr.io/$OWNER/bookcart-migrate:a0
 az group create -n $RG -l $LOC --tags purpose=a0
 ```
 
 ### Step 1 (item 2): the image on ghcr.io
 
+**Use the image CI published (A4), do not push your own.** After A4 is merged, every green run on `master` publishes `ghcr.io/<owner>/bookcart` and `bookcart-migrate`, tagged with the commit; the run's summary lists their digests. A package that is first created from your PC is not connected to the repository, and CI's later pushes to it would be refused.
+
+1. On GitHub: your profile, *Packages*, `bookcart`, *Package settings*, **Change visibility: Public** (packages start private), and the same for `bookcart-migrate`. Check that the package shows the repository under "Connected repository".
+2. Set the image from the latest green run (the commit id is the tag; the digest from the run summary also works):
+
 ```bash
-echo "<token>" | docker login ghcr.io -u $OWNER --password-stdin
-docker build --target app     -t $IMAGE         .
-docker build --target migrate -t $MIGRATE_IMAGE .
-docker push $IMAGE
-docker push $MIGRATE_IMAGE
+export IMAGE=ghcr.io/$OWNER/bookcart:<commit id> MIGRATE_IMAGE=ghcr.io/$OWNER/bookcart-migrate:<commit id>
+docker logout ghcr.io; docker pull $IMAGE     # must work without a login: the web app pulls anonymously
 ```
 
-Then on GitHub: your profile, *Packages*, `bookcart`, *Package settings*, **Change visibility: Public** (and the same for `bookcart-migrate`). Check from a logged-out shell: `docker logout ghcr.io && docker pull $IMAGE` must work.
+(If you ever do push a package by hand first, connect it under *Package settings*, *Connect repository*, and give the repository **Write** under *Manage Actions access*.)
 
 ### Step 2 (items 4, 5): the free database, Entra only
 

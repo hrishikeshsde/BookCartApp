@@ -82,17 +82,25 @@ jobs:
       - run: npm run verify:dist
 
   stack:
-    name: Docker stack (deploy, update, browser checks)
+    name: Docker stack (deploy, update, browser checks, publish)
     needs: [backend, frontend]
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      # Only the "Publish" step uses it, and only on a push to master (plan A4).
+      packages: write
+    # The published images by digest, for the release workflow (plan A5). Empty on pull requests.
+    outputs:
+      app_image: ${{ steps.publish.outputs.app_image }}
+      migrate_image: ${{ steps.publish.outputs.migrate_image }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      # Nothing here is pushed anywhere: the job builds the two images from the Dockerfile, starts the stack exactly as
-      # a server would (deploy/deploy.sh), and then checks it. The first run has no deploy/.env, so the script creates
+      # The job builds the two images from the Dockerfile, starts the stack exactly as a server would
+      # (deploy/deploy.sh), and then checks it; on master it then publishes those same images (the last steps). The first run has no deploy/.env, so the script creates
       # one (plain HTTP on port 8080, generated secrets): the empty line answers its "domain" question.
       - name: Deploy (first run)
         run: printf '\n' | bash deploy/deploy.sh
@@ -129,6 +137,48 @@ jobs:
         env:
           WEB: http://localhost:8080
         run: node pages.js
+      # Plan A4: the images that passed every check above are the ones that ship. They are taken from the running
+      # stack (the second deployment), never rebuilt: deploy.sh tagged its build "latest", and this step makes sure that
+      # is what the app container really runs.
+      - name: Find the tested images
+        run: |
+          running=$(docker inspect --format '{{.Image}}' bookcart-app)
+          built=$(docker image inspect --format '{{.Id}}' bookcart:latest)
+          if [ "$running" != "$built" ]; then
+            echo "::error::The running app ($running) is not bookcart:latest ($built); refusing to publish an untested image."
+            exit 1
+          fi
+          echo "Tested images: bookcart $built, bookcart-migrate $(docker image inspect --format '{{.Id}}' bookcart-migrate:latest)"
+      # Fails on CRITICAL vulnerabilities that have a fix (a newer base image or package). Runs on pull requests too, so
+      # a problem shows before the merge. The scanner is pinned by digest (Trivy 0.65.0).
+      - name: Scan the images
+        run: |
+          for image in bookcart:latest bookcart-migrate:latest; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+              aquasec/trivy@sha256:a22415a38938a56c379387a8163fcb0ce38b10ace73e593475d3658d578b2436 \
+              image --scanners vuln --severity CRITICAL --ignore-unfixed --exit-code 1 --no-progress "$image"
+          done
+      # Push both images to GitHub Container Registry, tagged with the commit, and hand their digests to the release.
+      # Only on master: pull requests build and test but never publish. No "latest" tag: releases use the digest.
+      - name: Publish the tested images to ghcr.io
+        id: publish
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          for name in bookcart bookcart-migrate; do
+            ref="ghcr.io/$owner/$name:$GITHUB_SHA"
+            docker tag "$name:latest" "$ref"
+            docker push --quiet "$ref"
+            digest=$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$ref" | grep "^ghcr.io/$owner/$name@sha256:")
+            test -n "$digest"
+            key=$([ "$name" = bookcart ] && echo app_image || echo migrate_image)
+            echo "$key=$digest" >> "$GITHUB_OUTPUT"
+            echo "- \`$name\`: \`$digest\` (tag \`$GITHUB_SHA\`)" >> "$GITHUB_STEP_SUMMARY"
+          done
+          docker logout ghcr.io
       - name: Logs of the stack
         if: failure()
         run: docker compose --env-file deploy/.env -f deploy/docker-compose.yml --profile '*' logs --no-color --tail 200 || true

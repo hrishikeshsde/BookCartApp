@@ -776,6 +776,25 @@ On `master`, after its checks pass, the CI **`stack` job** pushes **the very ima
 
 **Check:** the SHA tag exists on `ghcr.io`; the pushed digest is the one the stack job ran; a pull-request run pushes nothing.
 
+#### A4 results (implemented 2026-11-16; the GitHub check waits for the first merge to master)
+
+Files: `.github/workflows/ci.yml` (the `stack` job), `docs/AZURE_SIGNUP_AND_A0_RUNBOOK.md` (step 1). No application or Dockerfile change.
+
+What was built, in the `stack` job after the page checks:
+1. **Find the tested images:** the image of the running `bookcart-app` container (after the second, "update" deployment) must equal `bookcart:latest`, or the job fails ("refusing to publish an untested image").
+2. **Scan the images:** Trivy **0.65.0, pinned by digest** (`aquasec/trivy@sha256:a224...2436`), both images, `--severity CRITICAL --ignore-unfixed --exit-code 1`. Runs on **every** run, pull requests included, so a fixable critical shows before the merge.
+3. **Publish** (only `push` to `master`): `docker login ghcr.io` with the job's `GITHUB_TOKEN` (`permissions: packages: write` on this job only), tag `ghcr.io/<owner lower case>/bookcart:<sha>` and `bookcart-migrate:<sha>`, push, read each **digest**, write them to the job outputs `app_image` and `migrate_image` (for `release.yml`, A5) and to the run summary. No `latest` tag.
+
+Checked locally on 2026-11-16:
+- The scan command against the real images: both **clean** (0 fixable criticals; the app image is Ubuntu 24.04 with .NET 10.0.15). **Negative test:** the same command on `alpine:3.10.0` found 3 fixable criticals and **exited 1**, so the gate works.
+- The publish commands against a throwaway local registry standing in for `ghcr.io`: the outputs have the form `<registry>/<owner>/bookcart@sha256:...`, the owner is lower-cased, and **pulling by the published digest gave exactly the tested image id**. (Docker Desktop's image store makes the digest equal to the image id; on the GitHub runner they differ, which the commands do not depend on.)
+- `actionlint` 1.7.7 (with ShellCheck on the scripts): no findings.
+
+Found while doing it:
+- **The first push of a package decides its owner.** A package created by `docker push` from a PC is not connected to the repository, and the workflow's later pushes are refused. So the A0 runbook no longer pushes from the PC: A0 uses the image CI published. New packages are **private**; make both public once (A0 step 1), because the free web app pulls without credentials.
+
+Not checked yet: the real run on GitHub. After the next merge to `master`: the stack job is green, both packages exist with the commit tag, the summary shows the digests, and the pull-request run before it published nothing.
+
 ### A5: The release and the rollback
 
 ```

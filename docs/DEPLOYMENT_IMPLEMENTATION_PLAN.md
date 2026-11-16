@@ -3,7 +3,7 @@
 Scope: how BookCart is deployed. **One application image, two deployment targets.**
 
 - **Part D: a Docker server.** One host with Docker runs SQL Server, the app and Caddy (HTTPS), and one command deploys and updates it. Phases **D0 to D7**. **D0 to D5 are done and committed.**
-- **Part A: Azure App Service for Containers, released by CI/CD.** A container registry, a staging slot, an approval before production, a managed database, a key vault, monitoring with alerts, and backups that live off the host. Phases **A0 to A10**. **A plan only: nothing in it is started.**
+- **Part A: Azure free tier, released by CI/CD.** A study deployment at zero cost: App Service Free F1 running the container, the Azure SQL Database free offer, the image on GitHub Container Registry, an approval before each release, an automatic rollback, a budget alert. Phases **A0 to A5, A7 and A8** (A6, A9 and A10 skipped). **A plan only: nothing in it is started** (an `infra/` draft exists for the earlier paid design).
 
 This document merges two earlier ones: the Docker plan (written first, and mostly implemented) and a separate Azure plan. Section 4 lists the conflicts found between them and how each was resolved. Each phase ends with a check you can run. A finished phase keeps its results ("D3 results") directly under its plan text, as the record of what was built and where it differed from the plan, so this file can be picked up without the conversations that produced it.
 
@@ -17,9 +17,9 @@ This document merges two earlier ones: the Docker plan (written first, and mostl
 | D3 | `deploy.sh`, `backup.sh`, `make-admin.sh`, the `release.bat` wrapper | **Done** 2026-10-24 |
 | D4 | The image really is the app (pages, fonts, uploads, guest cart, browser checks) | **Done** 2026-10-24 |
 | D5 | A CI job that deploys the stack and checks it | **Done** 2026-10-25, **confirmed on GitHub** 2026-11-10 (the pull-request run #19 and the merge run #20 were green; the `stack` job took 2 min 54 s on a cold cache) |
-| D6 | Documentation and tidy-up, **both targets** | **Docker half done** 2026-11-10 (README, `CLAUDE.md`, F7-5 closed, executable bits). The Azure half is finished after A7 |
+| D6 | Documentation and tidy-up, **both targets** | **Docker half done** 2026-11-10 (README, `CLAUDE.md`, F7-5 closed, executable bits); follow-up 2026-11-15 (`ContainerRepository` removed, `ENFORCE_CSP`). The Azure half is **skipped** (2026-11-16: `docs/RUNBOOKS.md` from A7 and one README line replace it) |
 | D7 | Optional: a limited SQL login for the Docker target | Not started, optional |
-| A0 to A10 | Azure: spike, Bicep, GitHub trust, database access, image publishing, release pipeline, app changes, backups and runbooks, monitoring, domain and hardening, optional scale-out | Not started |
+| A0 to A8 | Azure free tier: the by-hand first deployment, Bicep, GitHub trust, database access, image publishing, release and rollback, trimmed backups and runbook, trimmed monitoring | Not started. **Rescoped 2026-11-16 to zero cost** (A6, A9, A10 skipped; A7, A8 trimmed). The `infra/` draft of 2026-11-15 was written for the paid design and is rewritten in A1 |
 
 ## 2. Requirement and decisions
 
@@ -38,13 +38,13 @@ This document merges two earlier ones: the Docker plan (written first, and mostl
 | Database | **SQL Server 2022 in a container**, data in a Docker volume (as before). The edition is Express (D2: the image's default, Developer, is not licensed for production). | D |
 | HTTPS | A **Caddy** container in the stack gets and renews a Let's Encrypt certificate for your domain. A blank domain means plain HTTP on the app port (demo or LAN). | D |
 | Schema and first admin | A **one-shot `migrate` container** applies the EF Core migrations before the app starts (after a backup if a database exists). The first admin is created by **one documented command** after registering. Part D needs **no backend code change**, and no admin account is seeded. | D |
-| Azure host | **App Service for Containers** (Linux). | A |
-| Release flow | **Staging slot, automatic tests, manual approval, swap into production.** Swapping back is the rollback. | A |
-| Instances | **One instance now, ready to scale later.** | A |
+| Azure host | **App Service Free F1 (Linux), running the container** (rescoped 2026-11-16: zero cost, study project). | A |
+| Release flow | **The CI stack job tests the exact image, you approve, the pipeline migrates and switches the image, checks, and rolls back by itself on failure.** No staging slot (F1 has none). | A |
+| Instances | **One instance** (F1 allows no more). | A |
 | Infrastructure as code | **Bicep**, in the repository. | A |
-| This document | One file, `DEPLOYMENT_IMPLEMENTATION_PLAN.md`. Phase labels D0 to D7 and A0 to A10. Finished Docker results stay inline under their phases. The leftover Docker work (D6, optional D7) is folded in. | both |
+| This document | One file, `DEPLOYMENT_IMPLEMENTATION_PLAN.md`. Phase labels D0 to D7 and A0 to A8. Finished Docker results stay inline under their phases. The leftover Docker work (D6, optional D7) is folded in. | both |
 
-Assumptions made without asking (change them if wrong): CI/CD is **GitHub Actions** (the repo already uses it); the registry is **Azure Container Registry**; the database is **Azure SQL Database** (the app already speaks SQL Server); secrets live in **Azure Key Vault**; monitoring is **Application Insights on a Log Analytics workspace**; GitHub authenticates to Azure with **OpenID Connect** (no stored passwords).
+Assumptions (rescoped 2026-11-16): CI/CD is **GitHub Actions**; the registry is **GitHub Container Registry** (free for a public repository); the database is the **Azure SQL Database free offer** (the app already speaks SQL Server); secrets are **App Service app settings** filled from GitHub environment secrets (Key Vault costs money per operation); monitoring is the **log stream, the built-in metrics and a scheduled uptime workflow**; GitHub authenticates to Azure with **OpenID Connect** (no stored passwords).
 
 ### Settled while building Part D (these were open in the Docker plan)
 
@@ -53,45 +53,50 @@ Assumptions made without asking (change them if wrong): CI/CD is **GitHub Action
 3. Backups kept: the newest 7 (`BACKUP_KEEP`, D3).
 4. SQL login for the Docker target: still `sa`; a limited login is the optional D7.
 
-### Still open (defaults in bold; none of them blocks A0)
+### Azure decisions (answered 2026-11-13 and 2026-11-16)
 
-1. **Region:** **the Azure region closest to your customers** (for customers in India, Central India or South India). It also decides which App Service tiers are offered; A0 checks the chosen SKU is available there.
-2. **App Service tier:** **Standard S1 (Linux)**. Slots need Standard or higher; Basic cannot do the approved-swap flow. Premium v3 (P0v3 and up) if you later need more memory or zone redundancy.
-3. **Production database tier:** **Standard S0**, scaled up when needed. **Staging database: Basic.** (The free tier is for development only: no SLA, and it auto-pauses, which makes test runs flaky.)
-4. **Database backups:** point-in-time restore kept **14 days** (7 is the default, up to 35), backup storage **geo-redundant**, long-term retention **weekly for 4 weeks, monthly for 12 months**.
-5. **Database login:** **Microsoft Entra only (no SQL password anywhere)**. The app uses a managed identity. Fallback if the tenant blocks it: SQL authentication with the password in Key Vault.
-6. **Who approves a production release:** **you** (a required reviewer on the GitHub `production` environment). Add people later.
-7. **Domain:** **a custom domain with an App Service managed certificate** (free). Until then the `azurewebsites.net` address works.
-8. **Alert recipient and monthly budget:** **your e-mail**; a budget alert at an amount you choose.
-9. **Scale-out phase (A10):** **later, only when you need a second instance.**
-10. **`Security:EnforceCsp`:** the policy is report-only today. D4 showed the built site produces no violations, so enforcing it is safe. Default: **enforce it in Azure staging first (A1), decide for Azure production in A9, and for the Docker target in D6** (the Compose file does not pass the setting through yet; that is one line).
+1. **Purpose and cost:** a study project; Part A runs on **free resources only, at zero cost**, without over-engineering (2026-11-16). The phases are trimmed accordingly: A0 to A5 kept, A7 and A8 trimmed, **A6, A9 and A10 skipped**, as are SBOM and attestations, the registry purge and the Azure half of D6.
+2. **Account:** an **Azure free account** (USD 200 credit and a spending limit for 30 days; no subscription exists yet). After day 30 it must be upgraded to pay-as-you-go to keep running; the design stays on free offers, and a USD 1 budget alert reports any mistake. When to upgrade is your decision.
+3. **Region:** **Central India** (South India is the fallback if A0 finds a free offer unavailable there).
+4. **App Service tier:** **Free F1 (Linux)**, which Microsoft documents as supporting Linux containers (checked 2026-11-16).
+5. **Database:** the **Azure SQL Database free offer**, exhaustion behaviour **auto-pause** (it stops until next month instead of billing). Backups: what the free offer includes (point-in-time, 7 days) plus a manual BACPAC export to your PC (A7).
+6. **Database login:** **Microsoft Entra only (no SQL password anywhere)**. The app uses a managed identity; the pipeline identity is the server's Entra administrator. Fallback if the tenant blocks it: SQL authentication with the password as an app setting.
+7. **Who approves a release:** **you** (a required reviewer on the GitHub `production` environment).
+8. **Domain:** **the `azurewebsites.net` address**, for good (A9 is skipped).
+9. **Alerts and budget:** **your e-mail**; a budget of **USD 1 per month** (the expected cost is zero).
+10. **`Security:EnforceCsp`:** report-only by default in both targets. The Docker target can enforce it with `ENFORCE_CSP=true` in `deploy/.env` (since 2026-11-15). **The Azure app enforces it** (`true`, A1): D4 found no violations.
+11. **CI triggers:** unchanged (push to `master`, pull request, manual).
+
+The step-by-step sign-up guide is `docs/AZURE_SIGNUP_AND_A0_RUNBOOK.md`; its spike commands were written for the earlier paid design and are rewritten for the free one together with A1.
+
 
 ## 3. One image, two targets
 
 The **same image** (`Dockerfile`, targets `app` and `migrate`) runs in both parts. What differs is configuration only:
 
-| Setting | Docker (Part D) | Azure (Part A) |
+| Setting | Docker (Part D) | Azure free tier (Part A) |
 |---|---|---|
-| Database | SQL Server container, `sa` login | Azure SQL, managed identity, no password |
-| Uploads and keys | Docker volumes at `/data/uploads`, `/data/keys` | Azure Files shares mounted at the same paths |
-| TLS | Caddy | App Service, managed certificate |
+| Database | SQL Server container, `sa` login | Azure SQL free offer, managed identity, no password |
+| Uploads and keys | Docker volumes at `/data/uploads`, `/data/keys` | the web app's persistent `/home`, at `/home/data/uploads`, `/home/data/keys` |
+| TLS | Caddy | App Service (`azurewebsites.net` certificate) |
 | `ASPNETCORE_FORWARDEDHEADERS_ENABLED` | `true` only behind Caddy | `true` |
-| Secrets | `deploy/.env` (mode 600) | Key Vault references |
-| Logs | Console, `docker logs` | Console plus OpenTelemetry to Application Insights (only when its connection string is set) |
-| Image | Built on the server by `deploy/deploy.sh` | Built once in CI, tested, pushed to the registry, deployed by digest |
-| Releases | `git pull && deploy/deploy.sh` | CI/CD: staging slot, approval, swap |
+| Secrets | `deploy/.env` (mode 600) | App Service app settings, filled from GitHub environment secrets |
+| Logs | Console, `docker logs` | Console, the App Service log stream |
+| Image | Built on the server by `deploy/deploy.sh` | Built once in CI, tested, pushed to `ghcr.io`, deployed by digest |
+| Releases | `git pull && deploy/deploy.sh` | CI/CD: approval, migrate, switch the image, check, automatic rollback |
 
-**Compatibility rule for every phase:** no code path may depend on Azure unless a setting turns it on. The CI `stack` job (the Docker target) stays a required check, and it is the proof that the single-container model still works.
+**Compatibility rule for every phase:** no code path may depend on Azure unless a setting turns it on. The CI `stack` job (the Docker target) stays a required check, and it is the proof that the single-container model still works. Part A needs **no application code change**.
 
 Shared building blocks (built once in Part D, reused by Part A):
 
 | Building block | Part D | Part A |
 |---|---|---|
-| `Dockerfile` (targets `app`, `migrate`) | built on the server (D1) | built once in CI, pushed to the registry (A4) |
-| The migration bundle (`migrate` image) | a Compose service and a standalone step (D2, D3) | a pipeline step against Azure SQL (A3) |
-| `deploy/verify.sh` | server self-check and CI (D5) | checks staging and production by URL (A5) |
-| `scripts/smoke/smoke.js`, `pages.js` | D4 and D5 | staging, before the approval (A5) |
-| `/health` | the image's `HEALTHCHECK` | App Service health check and swap warm-up (A1, A5) |
+| `Dockerfile` (targets `app`, `migrate`) | built on the server (D1) | built once in CI, pushed to `ghcr.io` (A4) |
+| The migration bundle (`migrate` image) | a Compose service and a standalone step (D2, D3) | copied out of the tested image and run against Azure SQL by the pipeline (A3) |
+| `deploy/verify.sh` | server self-check and CI (D5) | checks the Azure site by URL (A5) |
+| `scripts/smoke/smoke.js`, `pages.js` | D4 and D5 | `smoke.js` runs in the CI stack job only; `pages.js` (read-only) after each release (A5) |
+| `/health` | the image's `HEALTHCHECK` | the release pipeline's wait step (A5); **not** the App Service Health check feature (it would keep the free database awake) |
+
 
 ## 4. Conflicts found when merging, and how they were resolved
 
@@ -112,6 +117,7 @@ Shared building blocks (built once in Part D, reused by Part A):
 | 13 | "No backend code change" (a Docker decision) against the optional telemetry change in the Azure plan. | Scoped: Part D needs none; Part A has one optional change, off unless configured (A6). |
 | 14 | `Security:EnforceCsp` was an open question in `CLAUDE.md`; D4 settled the evidence; the Azure plan mentioned it twice. | One open decision (section 2, item 10). |
 | 15 | The two files tables overlapped, and the Docker one lacked files created later (`lib.sh`, `verify.sh`, `pages.js`, the `smoke.js` change, the `.gitignore` line). | One table with Part and Status columns (section 5). |
+| 16 | 2026-11-16: the owner rescoped Part A to a zero-cost study deployment. Rows 9 and 10 above, and earlier text, speak of a registry in Azure, a staging slot and phases A6, A9 and A10 of the full design. | Part A was rewritten for the free tier (F1, the SQL free offer, `ghcr.io`, no staging slot). Rows 9 and 10 still hold in spirit: the stack job pushes the image it tested (A4), and the first admin has a command (A3). The full design is in git history (`21a90d6`). |
 
 ## 5. Files this plan creates or changes
 
@@ -119,7 +125,8 @@ Shared building blocks (built once in Part D, reused by Part A):
 |---|---|---|---|
 | `Dockerfile`, `.dockerignore` | D | new: node stage, build stage, `migrate` and `app` targets | done (D1) |
 | `BookCart/BookCart.csproj` | D | `SkipClientBuild` switch on the two publish-time npm lines | done (D1) |
-| `BookCart/BookCart.csproj` | D | remove `ContainerRepository` and its comment | D6, only if the owner agrees |
+| `BookCart/BookCart.csproj` | D | remove `ContainerRepository` and its comment | done (D6 follow-up, 2026-11-15) |
+| `deploy/docker-compose.yml`, `deploy/.env.example`, `deploy/deploy.sh` | D | pass `ENFORCE_CSP` through (default `false`) | done (D6 follow-up, 2026-11-15) |
 | `.gitattributes` | D | `*.sh` and the Docker files at LF, `*.bat` at CRLF | done (D3) |
 | `deploy/docker-compose.yml`, `deploy/Caddyfile`, `deploy/.env.example` | D | the stack: SQL Server, migrate, app, optional Caddy | done (D2) |
 | `deploy/deploy.sh`, `backup.sh`, `make-admin.sh`, `lib.sh` | D | the one command, backups, the first admin, shared helpers | done (D3) |
@@ -128,16 +135,16 @@ Shared building blocks (built once in Part D, reused by Part A):
 | `deploy/verify.sh`, `.gitignore` (`deploy/.verify-tmp/`) | D | the post-deployment self-check | done (D5) |
 | `.github/workflows/ci.yml` | D | the stack job replaced the tar job | done (D5) |
 | `README.md`, `CLAUDE.md`, `docs/FRONTEND_CHANGES.md` | D | describe the real flow; close F7-5 | done (D6, Docker half) |
-| `infra/main.bicep`, `infra/modules/*.bicep`, `infra/parameters/*.bicepparam` | A | the whole Azure environment | A1 |
-| `infra/bootstrap.sh` (or `.ps1`) | A | the one-time resource group, deployment identity and trust in GitHub | A2 |
-| `.github/workflows/infra.yml` | A | what-if on pull requests, deploy on demand | A2 |
-| `.github/workflows/ci.yml` | A | the stack job scans and pushes the image it tested on `master` and calls `release.yml` | A4 |
-| `.github/workflows/release.yml` | A | reusable: staging, approval, production, summary | A5 |
-| `.github/workflows/rollback.yml`, `make-admin.yml` | A | manual: roll back or redeploy a SHA; promote the first admin behind the approval | A5, A3 |
-| `deploy/azure/*.sh` | A | database user setup, migration step, `make-admin`, swap and rollback helpers | A3, A5 |
+| `infra/main.bicep`, `infra/modules/*.bicep`, `infra/parameters/*.bicepparam`, `infra/README.md` | A | the free Azure environment (the 2026-11-15 draft for the paid design is rewritten) | A1 |
+| `infra/bootstrap.bicep` | A | the one-time pipeline identity, its trust in GitHub and its role on the group (run by you) | A1 (prep written 2026-11-16) |
+| `.github/workflows/infra.yml` | A | what-if, then deploy after approval (manual) | A2 |
+| `.github/workflows/ci.yml` | A | the stack job scans and pushes the images it tested on `master` and calls `release.yml` | A4 |
+| `.github/workflows/release.yml` | A | reusable: approval, migrate, switch the image, check, roll back on failure | A5 |
+| `.github/workflows/rollback.yml`, `make-admin.yml`, `uptime.yml` | A | manual rollback to a SHA; the first admin behind the approval; the 6-hourly uptime check | A5, A3, A8 |
+| `deploy/azure/*.sh` | A | database user setup, migration step, `make-admin` | A3 |
 | `deploy/verify.sh` | A | a mode that checks only a URL (no `docker` commands) | A5 |
-| `BookCart/Extensions/*.cs`, `BookCart.csproj`, `Directory.Packages.props` | A | optional telemetry, off unless configured | A6 |
-| `docs/RUNBOOKS.md`; the Azure half of `README.md` and `CLAUDE.md` | A | deploy, roll back, restore, rotate secrets | A7, D6 |
+| `docs/AZURE_SIGNUP_AND_A0_RUNBOOK.md` | A | sign-up guide and the by-hand first deployment (rewritten for the free design) | A0 |
+| `docs/RUNBOOKS.md`, one line in `README.md` | A | release, roll back, restore, rotate the JWT key, free-tier limits | A7 |
 
 The development scripts (`scripts/dev-*.bat`) are **not touched**.
 
@@ -574,7 +581,7 @@ One documentation phase for the whole deployment story. **The Docker half can be
 - Already done by D2 and D5, so **not** left to do: removing `init-volumes`, the published SQL port, the CI tar step and `artifacts/publish`.
 - Update the project notes (the assistant's memory file) with the new flow.
 
-**Azure half (after A7):** a "Deploying to Azure" section in the README that links `docs/RUNBOOKS.md`; the Azure facts, settings and commands in `CLAUDE.md`; the two targets compared in one table.
+**Azure half: skipped (2026-11-16, Part A rescoped to the free tier; `docs/RUNBOOKS.md` from A7 plus one README line replace it).** As first planned: a "Deploying to Azure" section in the README that links `docs/RUNBOOKS.md`; the Azure facts, settings and commands in `CLAUDE.md`; the two targets compared in one table.
 
 **Check:** a person who has never seen the repo can deploy with Docker from the README alone (try it on a fresh VM or a clean Docker Desktop). After A7, the same for an Azure release, using the runbooks.
 
@@ -592,8 +599,12 @@ Found while doing it:
 - **The README was damaged before D6**: the development-scripts table had lost its backslashes (`scriptsdev-start-all.bat`) and the `release.bat` row held a stray carriage-return character. The rows were rewritten, and all docs were scanned: no control characters remain in the README, `CLAUDE.md`, `FRONTEND_CHANGES.md`, this plan or the architecture guide.
 
 Decided here:
-- `Security:EnforceCsp` for the Docker target: **left report-only and documented** (the README says it is safe to enforce and how). Passing it through the Compose file is not done; it is one line plus an `.env.example` entry if you want it.
-- `ContainerRepository` and its comment in `BookCart/BookCart.csproj`: **left in place** (harmless; removing it needs the owner's agreement).
+- `Security:EnforceCsp` for the Docker target: **left report-only and documented** (the README says it is safe to enforce and how). Passing it through the Compose file was left undone here; **done 2026-11-15** (see "D6 follow-up" below).
+- `ContainerRepository` and its comment in `BookCart/BookCart.csproj`: **left in place** (harmless; removing it needs the owner's agreement). **Removed 2026-11-15 with the owner's agreement** (see below).
+
+**D6 follow-up (2026-11-15, at the owner's request):**
+- `BookCart/BookCart.csproj`: the `ContainerRepository` property and its comment are removed (nothing reads them; the image is built from the `Dockerfile`).
+- `deploy/docker-compose.yml`: the app now gets `Security__EnforceCsp: ${ENFORCE_CSP:-false}`; `deploy/.env.example` documents `ENFORCE_CSP` and `deploy/deploy.sh` writes `ENFORCE_CSP=false` into a new `.env`. **Behaviour does not change** (default `false`: report-only); an existing `.env` without the key also stays report-only. The README says how to enforce it.
 
 Checked: every flag and command the README names exists (`deploy.sh -y`, `--pull`, `-h`; `verify.sh [url]`; `backup.sh [name]`), the backup count (7) and the standalone migration are in the scripts, every path it links exists, and the docs hold no stray control characters. **Not done:** the "stranger test" on a fresh VM or a clean Docker Desktop (the README was checked against the code and against D3 to D5, not followed by a person). The Azure half of D6 waits for A7.
 
@@ -621,281 +632,249 @@ The `migrate` service keeps `sa` (it needs DDL rights). The `app` should run as 
 
 ---
 
-## Part A: Azure App Service with CI/CD (A0 to A10)
+## Part A: Azure free tier, released by CI/CD (A0 to A8)
 
-Scope: hosting BookCart on Azure the way a production application is hosted: a container registry, automatic deployment from CI with a staging slot and an approval before production, a managed database, secrets in a vault, monitoring with alerts, and backups that live off the host. **This part is a plan. Nothing in it is implemented.** It reuses what Part D built: the same image and the migrate image (D1), the stack job (D5), `deploy/verify.sh` (D5) and the browser checks (D4).
+Scope (rescoped 2026-11-16 by the owner): BookCart is a **study project**. Part A must produce a **running application on Azure, at its `azurewebsites.net` address, deployed and released by CI/CD, at zero cost**, while still practising the skills a production release needs: infrastructure as code, passwordless access between GitHub, the app and the database, one tested image that ships, database migrations in the pipeline, an approval before release, an automatic rollback, backups and a runbook. Anything that only pays off with real traffic or a real team is left out, and listed under "Production upgrade path" so you know what it would add.
 
-### Starting point (verified 2026-11-10)
+The earlier full design (Standard S1, staging slot and swap, Azure Container Registry, Key Vault, Azure Files, Application Insights, phases A6, A9, A10) is in this file's git history (commit `21a90d6`). The `infra/` draft of 2026-11-15 was written for that design and is rewritten in A1.
 
-- One image (`Dockerfile`, targets `app` and `migrate`), built from source, non-root user (uid 1654), health check on `/health`, listens on port 8080.
-- CI (`.github/workflows/ci.yml`): backend, frontend, and a `stack` job that deploys the real stack with Compose, verifies it and runs the browser checks. **There is no deploy workflow, no registry, no `infra/` folder.**
-- State kept inside one instance: uploaded covers (a folder, `Storage:UploadFolder`), the keys that encrypt the guest cookie (a folder, `Security:DataProtectionKeysPath`), the catalogue output cache, the rate limiters and the AI-summary cache (all in memory).
-- Logging is console only; there are no telemetry packages.
-- Secrets are read from configuration (`Jwt:SecretKey`, `ConnectionStrings:DefaultConnection`, `Gemini:ApiKey`), so environment variables and Key Vault references work without code changes. `Azure.Identity` is already in the dependency graph (through `Microsoft.Data.SqlClient`).
+**Phases kept:** A0, A1, A2, A3, A4, A5, and trimmed A7 and A8. **Skipped (owner's decision, 2026-11-16):** A6 (telemetry), A9 (custom domain and hardening: the site stays on `azurewebsites.net`), A10 (scale-out), SBOM and attestations, the registry purge task, and the Azure half of D6 (`docs/RUNBOOKS.md` from A7 is the Azure documentation).
 
+### The zero-cost rule
 
-### What Microsoft's documentation says that shapes Part A (checked 2026-11-10)
-
-| Fact | Consequence |
+| Use (free) | Instead of (costs money) |
 |---|---|
-| Deployment slots exist in **Standard, Premium and Isolated** tiers (Standard: 5 slots), at no extra charge. A swap warms the instances first, so there is no downtime, and swapping again is a rollback. | S1 is the minimum tier. Production is never deployed to directly. |
-| For containers: tag the image with the commit id, never `latest`; push it to the registry; point the **staging slot** at the tag; swap. | Image tag = git SHA. The pipeline updates the slot's image, not production's. |
-| TLS ends at App Service's front ends; the container receives plain HTTP. Custom containers must say which port to forward to (`WEBSITES_PORT`); only one port is supported. **`UseHttpsRedirection`/`UseHsts` loop forever behind it unless `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`** (this flag trusts every proxy, which is fine because the app is only reachable through the platform). | The app sets `WEBSITES_PORT=8080` and `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`. The Docker setup already supports this setting. |
-| App Service can pull from Azure Container Registry with a **managed identity** (role `AcrPull`, setting `acrUseManagedIdentityCreds`; the registry must accept ARM-audience tokens). | No registry password anywhere. |
-| **Azure Files** can be mounted into a Linux custom container (up to 5 mounts, SMB or NFS). All instances share the mount. The storage account **key** is the only supported authentication (not Entra). The mount directory must be empty and cannot be `/`, `/home` or under `/tmp`. Adding or changing a mount restarts the app. **Mounts are not covered by App Service backups.** Mounts can be marked slot-specific. | Covers and keys go on Azure Files mounts at `/data/uploads` and `/data/keys` (the existing settings, no code change). The share needs its own backup. Because all instances share it, this also keeps covers and keys correct when a second instance is added later. |
-| **Azure SQL Database** supports passwordless connections: `Authentication="Active Directory Default"` (or a user-assigned identity with `User Id=<client-id>`) through `Microsoft.Data.SqlClient`; the database user is created with `CREATE USER [name] FROM EXTERNAL PROVIDER` and roles. Microsoft warns that one all-powerful identity is not production practice: use separate identities per task. | The app identity gets `db_datareader` and `db_datawriter` only. A separate identity (the pipeline's) applies migrations. |
-| Azure SQL Database automatically takes full, differential and log backups: restore to any point in time within **7 days by default (1 to 35, Basic: 1 to 7)**; long-term retention up to 10 years; geo-restore needs geo-redundant backup storage. The **free tier has no SLA, is for development, and cannot hold an existing database**. | "Off-host backups" are built in and live in separate Azure storage. Production uses a paid tier. |
-| **Health check** pings a path each minute. With **one** instance it never removes the instance from the load balancer (that would be an outage), but it replaces it after an hour of failures; it does not follow redirects; its configuration is **not slot-specific** (it moves with a swap). | The path is `/health`, identical in both slots. It is monitoring plus self-healing, not high availability, until there are two instances. |
-| **Key Vault references** in app settings use the app's identity (role `Key Vault Secrets User`); a user-assigned identity needs `keyVaultReferenceIdentity`. | Secrets are references, never values. |
-| GitHub Actions authenticates with **OpenID Connect** (`azure/login@v2`): a federated credential on a Microsoft Entra app **or a user-assigned managed identity**. Environment secrets are not released until the environment's reviewers approve. | No client secrets in GitHub. The `production` environment's approval is the release gate. |
-| Application Insights for ASP.NET Core uses OpenTelemetry (`UseAzureMonitor()` with `APPLICATIONINSIGHTS_CONNECTION_STRING`); Microsoft's current guidance for a **new** app is its Microsoft OpenTelemetry Distro (`Microsoft.OpenTelemetry`); never both. | Telemetry is enabled only when the connection string is set, so the plain Docker setup is unchanged. The distro is chosen in A6. |
+| **App Service Free F1** (Linux), one web app | Standard S1 with a staging slot |
+| **Azure SQL Database free offer** (serverless, with "pause when the free amount is used up") | S0 production + Basic staging |
+| **GitHub Container Registry** (`ghcr.io`), public package | Azure Container Registry (no free tier) |
+| **App Service app settings** (encrypted at rest), values from GitHub environment secrets | Key Vault references (charged per operation: tiny, but not zero) |
+| **The web app's persistent `/home` storage** for covers and keys | Azure Files shares (a storage account) |
+| **Log stream and the built-in App Service metrics**; a scheduled GitHub workflow as the uptime check | Application Insights and Log Analytics |
+| User-assigned **managed identities**, **GitHub OIDC**, a **Cost Management budget** | (these are free in both designs) |
 
-Sources: Microsoft Learn, App Service "Set up staging environments", "Deployment best practices", "Configure a custom container (Linux)", "Mount Azure Storage as a local share", "Monitor instances by using Health check", "Key Vault references", "Deploy a custom container with GitHub Actions"; Azure SQL "Automated backups", "Free tier", "Passwordless connections"; ASP.NET Core "Proxy servers and load balancers"; Azure Monitor "OpenTelemetry".
+GitHub side: the repository is public, so Actions minutes, environments with required reviewers and public packages cost nothing.
 
-**Not yet verified, so A0 proves them on a throwaway resource group** (a wrong guess here would cost days later): the exact list is in A0.
+**The account.** The Azure free account has a spending limit for its first 30 days, so nothing can be charged then. After day 30 it must be upgraded to pay-as-you-go to keep running; the free offers above stay free, but the spending limit is gone, and from then on **the budget alert (USD 1) is the safety net** for a mistake (a paid SKU, a forgotten restore). Upgrading is your decision, taken when the 30 days run out.
 
+**Checked against Microsoft Learn on 2026-11-16** ("Azure subscription and service limits: App Service", "Quickstart: run a custom container" (it selects F1), "Configure a custom container: use persistent shared storage", "Build and test apps with the Azure SQL Database free tier", the free-tier Q&A threads). Still unproven, so A0 checks them: the daily CPU-minute quota of F1, the non-root write to `/home`, and how fast the app's connection pool lets the database pause.
 
-### Target architecture (Azure)
+### Free-tier limits that shape the design (A0 confirms them)
+
+| Limit | Consequence for BookCart |
+|---|---|
+| **F1 runs custom Linux containers** (verified: the limits table lists "Linux code-only and containers" for Free, and Microsoft's container quickstart picks F1) | The design works as planned. |
+| **F1 limits** (verified): 1,024 MB memory per plan, **165 MB bandwidth** (outbound data quota), shared compute, no SLA, no managed certificates, no slots, one instance, no Always On. **Not in the excerpts read:** the daily CPU-minute quota (about 60 minutes is the commonly quoted figure) | The site sleeps when idle and the first request starts the container again (measured in A0). A release restarts the app: a short outage, accepted. The bandwidth quota is the tightest limit: the site's first page load is about 1 MB of scripts and styles, so on the order of 150 uncached visits use it up (A0 checks whether it is per day). When a quota is used up, the site is stopped until it resets. |
+| **SQL free tier** (verified): 100,000 vCore-seconds of serverless General Purpose compute per month for the life of the subscription; no SLA ("development and proof-of-concept"); **auto-pauses after 15 minutes without activity, fixed**; exhaustion behaviour **auto-pause until next month** (no charge) or bill the overage, and **bill cannot be switched back** to auto-pause; the free tier applies only to a **new** database, **a backup cannot be restored into a free database**; with advanced configuration the first free database's region applies to all free databases of the subscription | **Anything that keeps a connection open or queries on a timer keeps the database awake and burns the monthly amount**: Microsoft's Q&A threads show users who used it all in two days with an idle app. So: the App Service Health check feature (a request every minute; `/health` queries the database) is **off**; the uptime check requests `/` (no database) a few times a day; query tools are closed after use; A0 watches the **"Free amount remaining"** metric. An awake hour at the minimum 0.5 vCore costs about 1,800 vCore-seconds, so roughly 50 awake hours a month (an estimate). Choose **auto-pause** at creation: the other choice is permanent. |
+| **`/home` is persistent** when `WEBSITES_ENABLE_APP_SERVICE_STORAGE=true` (verified; Microsoft's pages disagree on the default for Linux containers, so the setting is always set explicitly). Data in `/home` counts against the plan's storage quota | Covers go to `/home/data/uploads`, the Data Protection keys to `/home/data/keys` (the existing settings `Storage:UploadFolder` and `Security:DataProtectionKeysPath`, no code change). A0 checks that the image's non-root user (uid 1654) can write there. |
+| **A public `ghcr.io` package** can be pulled by anyone | Fine: the image holds no secret (everything secret comes from settings). The web app pulls it without credentials. |
+
+### Target architecture (free)
 
 ```
- GitHub                                   Azure (one resource group per environment)
- ──────                                   ───────────────────────────────────────────
- push to master                                  Users ──▶ custom domain + free managed certificate
-   │                                                │  (TLS ends at App Service)
-   ▼                                                ▼
- CI: backend, frontend, stack job (builds + tests the image)
-   │ green                          ┌──────── App Service plan S1 (Linux) ────────┐
-   ▼                                │  production slot ◀── swap ──▶ staging slot │
- push the tested image──push──▶ ACR │  one instance, Always On, health check /health
-   tag = git SHA   (scan first)     │  user-assigned managed identity on both slots
-   │                                └─────┬─────────────┬────────────┬────────────┘
-   ▼                                      │             │            │
- deploy to STAGING slot                   ▼             ▼            ▼
- migrate STAGING database          Azure SQL DB    Azure Files    Key Vault
- verify.sh + smoke + pages         BookDB (prod)   uploads, keys  JWT key, Gemini key
-   │ green                         BookDB_Staging  (+ staging share)
-   ▼                                      │
- wait for approval (GitHub environment)   └── automatic backups (point-in-time, long-term, geo-redundant)
+ GitHub (public repository)                     Azure: one resource group, Central India
+ ──────────────────────────                     ────────────────────────────────────────
+ push to master
+   │
    ▼
- migrate PRODUCTION database
- swap staging ⇄ production            Application Insights + Log Analytics: logs, metrics, traces
- post-swap checks (read-only)         Alerts ▶ e-mail          Budget alert
- failed? swap back
+ CI: backend, frontend, stack job (builds the image and tests it end to end in Docker)
+   │ green
+   ▼
+ push the tested images to ghcr.io  ── tag = git SHA, deployed by digest
+   │
+   ▼
+ release: wait for YOUR approval (environment "production")
+   │ approved
+   ▼
+ migrate the database  ───────────────────────▶  Azure SQL free database (Entra-only, auto-pause)
+ point the web app at the new digest ────────▶  App Service F1 (Linux), one web app
+ check it (health, verify.sh, pages.js)          user-assigned identity ──▶ database user
+ failed? point it back at the previous digest    covers + keys in /home (persistent)
+                                                 settings: JWT key etc. (encrypted at rest)
+ every 6 hours: request "/" (uptime)             budget alert at USD 1 ──▶ your e-mail
 ```
 
-
-### Release management
+### Release management (free version)
 
 | Topic | Rule |
 |---|---|
-| Branching | Trunk-based: short-lived branches, pull requests into `master`, required checks (backend, frontend, stack). No direct pushes. |
-| Versions | The image tag is the git SHA (traceable). A release is marked with a git tag `vMAJOR.MINOR.PATCH` and a GitHub Release with notes; the deployment records SHA and tag. |
-| Promotion | Merge to `master` goes to **staging** automatically. **Production** needs the approval on the `production` environment, so only an image that passed staging can be released, and it is the *same image digest* that the stack job tested (A4). |
-| One at a time | A concurrency group stops two releases running at once; a newer merge waits or replaces a pending staging deploy. |
-| Rollback | Swap the slots back (the previous image is still in the other slot) and re-run the checks. A manual workflow redeploys any earlier SHA. |
-| **Database changes** | Staging and production run different code against a database for a short time, and a rollback runs old code on a migrated database. So every migration must be **backward compatible** (expand, then contract in a later release): add columns and tables first, remove or rename in a later release once nothing uses them. The migration is rehearsed on the staging database before it touches production. A release that cannot follow this rule is released in a maintenance window, by hand. |
-| Hotfix | The same pipeline; branch from `master`, fast review, approval. No shortcut around staging. |
-| Infrastructure changes | Pull request on `infra/`; the pipeline shows `what-if` on the PR and deploys after merge. Nobody edits resources in the portal. |
-| Secrets | Rotated by changing the Key Vault secret; the app reads the new value after a restart (versionless references). A rotation runbook is part of A7. |
-| Audit | GitHub shows who approved which release; Azure's activity log shows what changed. |
+| Branching | Trunk-based: pull requests into `master`, required checks (backend, frontend, stack). |
+| What ships | The image the CI `stack` job built and tested, by **digest** (A4). Nothing is rebuilt for a release. |
+| Pre-production test | **The CI `stack` job is the staging environment**: it deploys the exact image with a real SQL Server and runs `verify.sh`, `smoke.js` and `pages.js` against it (D5). There is no Azure staging (no slots on F1). |
+| Approval | The release job runs in the GitHub environment `production`, which has you as required reviewer. |
+| Release | Migrate, switch the image, check. A short restart outage is accepted (no swap on F1). |
+| Rollback | Automatic if the post-release checks fail (back to the previous digest); by hand with `rollback.yml` for any earlier SHA. |
+| **Database changes** | A rollback runs old code on a migrated database, so every migration stays **backward compatible** (expand first, remove in a later release). The CI stack job runs every migration before release. |
+| Infrastructure changes | Through `infra/` and the infra workflow, never by hand in the portal (after A0). |
+| Secrets | GitHub environment secrets, passed to Bicep as secure parameters, stored as app settings. Rotating the JWT key: change the secret, run the infra workflow (everybody is signed out). |
 
+### A0: The first deployment by hand (learn each piece, prove the free assumptions)
 
-### A0: Prove the parts that cannot be read from documentation (spike, on a throwaway resource group)
+Because everything is free, there is **no throwaway spike**: you build the real environment once by hand with the Azure CLI, which is the best way to learn what each piece does. A1 then deletes it and recreates it from Bicep, which proves the infrastructure code. The commands are in `docs/AZURE_SIGNUP_AND_A0_RUNBOOK.md` (rewritten for the free design on 2026-11-16). The A0 resource group stays until A1 is ready, then is deleted (one free database per subscription).
 
-Create a temporary resource group (S1 plan, a Basic SQL database, a registry, a storage account) and prove each item below; delete the group afterwards. Record outcomes at the top of this phase, as was done in D0.
+1. **F1 takes a container:** an F1 Linux plan in Central India runs the BookCart image (fallback region South India).
+2. **The image from `ghcr.io`:** push it once from your PC, make the package public, and point the web app at it.
+3. **`/home` is writable by uid 1654:** upload a cover as an admin, restart the app, the cover and a guest cart from before the restart are still there.
+4. **Free SQL with no password:** create the free-offer database (exhaustion behaviour "auto-pause") with Entra-only authentication; the app's user-assigned identity connects with `Authentication=Active Directory Managed Identity`; record whether `CREATE USER ... FROM EXTERNAL PROVIDER` works or `WITH OBJECT_ID` is needed.
+5. **Migrations from outside:** run the migration bundle (copied out of the `migrate` image) from your PC with your own Entra login, through a temporary firewall rule for your address.
+6. **Behind the platform's proxy:** no redirect loop (`ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`), the guest cookie is `Secure`.
+7. **Cold start:** time the first request after the app has slept and the database has paused; it must succeed (EF Core retries) or fail clearly. Record the numbers.
+8. **Quotas and cost:** after a day of light use, the CPU minutes and bandwidth used (the plan's Quotas page, and whether they reset daily) and the database's **"Free amount remaining"** metric; check that the database pauses about 15 minutes after the last request (the connection pool must let go); *Cost analysis* shows 0.00.
+9. **Region:** both free offers are available in Central India.
 
-1. **Region and SKU:** the chosen region offers S1 for Linux containers (`az appservice list-locations --linux-workers-enabled --sku S1`).
-2. **Non-root writes to an Azure Files mount:** the image runs as uid 1654; confirm that user can create and delete files in `/data/uploads` and `/data/keys` on the mount, and that the app's Data Protection key ring and an uploaded cover work. (If not: run a startup command that adjusts ownership, or mount with options.)
-3. **Passwordless SQL from the container:** `Authentication=Active Directory Managed Identity` with `User Id=<client id>` of a user-assigned identity, through EF Core with the pooled `DbContext` and `EnableRetryOnFailure`; the `/health` check passes; token refresh works over several hours.
-4. **Creating the database user without Graph permissions:** `CREATE USER [identity] FROM EXTERNAL PROVIDER` may need the SQL server to read the directory; the fallback is `... WITH OBJECT_ID = '<id>'`. Decide which.
-5. **Slots:** the user-assigned identity assigned to **both** slots; **slot-specific** settings stay put on a swap (database, mounts, issuer); the container image and the `/health` warm-up move with the swap; `WEBSITE_WARMUP_PATH` and the swap warm-up behave; a swap back restores the previous version.
-6. **Forwarded headers:** no redirect loop with `UseHttpsRedirection`; the guest cookie is `Secure`; the rate limit sees the caller's address.
-7. **Registry pull by identity:** `AcrPull` plus `acrUseManagedIdentityCreds` (and ARM-audience tokens enabled) pulls a tagged image into both slots.
-8. **Pipeline access to the database:** from a GitHub-hosted runner, a **temporary firewall rule** for the runner's address, Entra authentication of the pipeline identity (as the server's Entra administrator), `dotnet ef` bundle against Azure SQL, then the rule is removed. Measure how long it takes.
-9. **Telemetry package choice:** `Microsoft.OpenTelemetry` versus `Azure.Monitor.OpenTelemetry.AspNetCore` with this app (.NET 10); pick one and show requests, SQL calls and logs arriving in Application Insights.
+**Check:** each item has a recorded yes or no and the exact command or setting that worked.
 
-**Check:** each item has a recorded yes/no and the exact command or setting that worked.
+### A1: Infrastructure as code (Bicep, free resources only)
 
-### A1: Infrastructure as code (Bicep)
+**Prep status (2026-11-16): written offline in `infra/` for the free design** (`bootstrap.bicep`, `main.bicep`, `modules/webapp.bicep`, `modules/sql.bicep`, `modules/budget.bicep`, `parameters/production.bicepparam`, `README.md`). The free-tier database and budget property names were checked on Microsoft Learn. **Not compiled yet** (no Bicep CLI on the PC) and not deployed: A1 is done only when the Check below passes on Azure, after A0.
 
-An `infra/` folder deploys, per environment (a `production` resource group and the `staging` slot/database inside it):
+**Once, by you, before the first run:** delete the A0 resource group (**only one free database is allowed per subscription**), create `rg-bookcart`, and deploy `infra/bootstrap.bicep`. It creates the **pipeline identity** with its federated credential for `repo:<owner>/BookCartApp:environment:production` and **Contributor** on the group. It is kept out of `main.bicep` because creating a role assignment needs Owner rights, which the pipeline does not have; it was A2's `bootstrap.sh` in the first version of this plan.
 
-1. **Identities:** one user-assigned identity for the app (both slots), one for the pipeline (federated with GitHub, A2).
-2. **Monitoring:** Log Analytics workspace, workspace-based Application Insights, diagnostic settings for the web app (console logs, HTTP logs) and the SQL database.
-3. **Registry:** ACR Basic, admin user disabled, ARM-audience tokens on; role `AcrPull` for the app identity, `AcrPush` for the pipeline identity; a scheduled purge of old untagged images.
-4. **Key Vault:** RBAC mode, soft delete and purge protection on; `Key Vault Secrets User` for the app identity; secrets for the JWT key and the Gemini key (values set outside the repository).
-5. **Storage:** one account (Standard, zone-redundant if the region allows), file shares `uploads`, `keys`, `uploads-staging`, `keys-staging`; share soft delete on; secure transfer only.
-6. **Azure SQL:** logical server with **Entra-only authentication**, the pipeline identity as its Entra administrator; database `BookDB` (S0) and `BookDB_Staging` (Basic); retention and redundancy from the decisions above; firewall closed except "no public access" rules managed by the pipeline (A3); TLS 1.2.
-7. **App Service:** plan S1 Linux; web app with the container image setting, `httpsOnly`, minimum TLS 1.2, FTPS and basic publishing credentials **off**, `alwaysOn`, `clientAffinityEnabled: false` (the app is stateless: JWT and the guest cookie), `healthCheckPath: /health`; the `staging` slot; identities on both; settings (below); Azure Files mounts **marked slot-specific**.
-8. **Alerts and budget** (A8 fills them in; the resources are declared here).
+`infra/main.bicep` (the same resource group) creates:
 
-App settings (S = slot-specific, so it stays with the slot on a swap):
+1. **App identity:** a user-assigned managed identity (the database user is created for it in A3).
+2. **App Service:** a Free F1 Linux plan; the web app with the container image (a parameter), `httpsOnly`, minimum TLS 1.2, FTPS off, basic publishing credentials off (FTP and SCM), `clientAffinityEnabled: false`; no Always On and no health check path (see the limits table).
+3. **Azure SQL:** a logical server with **Entra-only authentication**, the **pipeline identity** as its Entra administrator, TLS 1.2, the "Allow Azure services" firewall rule (private networking is out of scope, section 6; Entra-only authentication is what keeps everyone else out); the database `BookDB` on the **free offer** with exhaustion behaviour **auto-pause**.
+4. **Budget:** USD 1 per month on the resource group, e-mail at 50 % and 100 % of actual and forecast cost.
 
-| Setting | Value | S |
-|---|---|---|
-| `WEBSITES_PORT` | `8080` | |
-| `WEBSITES_ENABLE_APP_SERVICE_STORAGE` | `false` | |
-| `ASPNETCORE_FORWARDEDHEADERS_ENABLED` | `true` | |
-| `ConnectionStrings__DefaultConnection` | `Server=tcp:<server>.database.windows.net,1433;Initial Catalog=BookDB(_Staging);Encrypt=True;Authentication=Active Directory Managed Identity;User Id=<app identity client id>` | yes |
-| `Jwt__SecretKey` | `@Microsoft.KeyVault(SecretUri=...)` (a different secret per slot) | yes |
-| `Jwt__Issuer`, `Jwt__Audience` | `https://<the slot's host name>/` | yes |
-| `Gemini__ApiKey` | Key Vault reference | |
-| `Storage__UploadFolder`, `Security__DataProtectionKeysPath` | `/data/uploads`, `/data/keys` (the mounts differ per slot) | yes |
-| `Security__EnforceCsp` | `true` in staging first (D4 found no violations) | |
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | from the Application Insights resource | |
-| `WEBSITE_WARMUP_PATH` | `/health` | |
+App settings (all set by Bicep, so a re-run never loses one):
 
-**Check:** `az deployment ... what-if` is clean; a deployment into an empty resource group succeeds; a second run changes nothing (idempotent); the web app serves the placeholder image; no secret is in the repository or in a Bicep output.
+| Setting | Value |
+|---|---|
+| `WEBSITES_PORT` | `8080` |
+| `WEBSITES_ENABLE_APP_SERVICE_STORAGE` | `true` (persistent `/home`) |
+| `ASPNETCORE_FORWARDEDHEADERS_ENABLED` | `true` |
+| `ConnectionStrings__DefaultConnection` | `Server=tcp:<server>.database.windows.net,1433;Initial Catalog=BookDB;Encrypt=True;Authentication=Active Directory Managed Identity;User Id=<app identity client id>` |
+| `Jwt__SecretKey` | a **secure parameter**, from the GitHub environment secret `JWT_SECRET` (never in the repository, a parameter file or an output) |
+| `Jwt__Issuer`, `Jwt__Audience` | `https://<the app's host name>/` |
+| `Gemini__ApiKey` | only if the optional secret `GEMINI_API_KEY` exists (else the summary endpoint answers 503) |
+| `Storage__UploadFolder`, `Security__DataProtectionKeysPath` | `/home/data/uploads`, `/home/data/keys` |
+| `Security__EnforceCsp` | `true` (D4 found no violations; one setting to change if something breaks) |
 
-### A2: Trust between GitHub and Azure, and the environments
+The image is a parameter. The infra workflow (A2) reads the image the app currently runs and passes it, so an infrastructure run never rolls the app back. The parameter file reads the image, `JWT_SECRET`, `GEMINI_API_KEY` and the budget e-mail from environment variables (`readEnvironmentVariable`), so none of them is in the repository.
 
-1. **Bootstrap (once, by you):** `infra/bootstrap.*` creates the resource group, the pipeline's user-assigned identity, its federated credentials for the repository (`environment:staging`, `environment:production`, and pull requests for `what-if` only), and the minimum role assignments (Contributor on the resource group, plus the ability to assign the roles A1 needs). It needs an account with Owner (or Contributor plus User Access Administrator) on the subscription.
-2. **GitHub:** environments `staging` (no approval) and `production` (**required reviewers**, a wait timer if you want one, restricted to the `master` branch); variables for the client, tenant and subscription ids (they are identifiers, not secrets); branch protection on `master` with the three required checks.
-3. **`infra.yml`:** `what-if` as a pull-request comment for changes under `infra/`; deploy on manual dispatch and on merge.
+**Check:** `what-if` is clean; a deployment into an empty resource group succeeds and the site works after A3 and A5; a second run changes nothing; no secret is in the repository or an output; *Cost analysis* still shows 0.00.
 
-**Check:** a workflow run logs in to Azure with OIDC and lists the resource group; a run from a branch that is not allowed fails; a production-environment job waits for approval.
+### A2: Trust between GitHub and Azure
+
+1. **The Azure side** is already in place from A1 (`infra/bootstrap.bicep`: the pipeline identity, its federated credential, Contributor on the group).
+2. **GitHub:** the environment `production` with **you as required reviewer**, deployments only from `master`; environment secrets `JWT_SECRET` (and optionally `GEMINI_API_KEY`); variables for the client, tenant and subscription ids and the resource group (identifiers, not secrets); branch protection on `master` with the three checks.
+3. **`infra.yml`** (manual): `what-if`, then, in the `production` environment (so after your approval), the deployment.
+
+**Check:** a workflow run logs in with OIDC and lists the resource group; a run outside the `production` environment cannot log in; the deployment job waits for approval.
 
 ### A3: Database access and migrations
 
-1. **App user:** an idempotent script (`deploy/azure/grant-app-access.sh`) run by the pipeline creates the database user for the app identity with `db_datareader` and `db_datawriter` only, in both databases. (The health check reads `__EFMigrationsHistory`; that needs only read access.)
-2. **Migration step:** the pipeline pulls the `migrate` image from the registry and runs the EF bundle against the target database with the **pipeline identity** (which can change the schema), opening a **temporary firewall rule** for the runner's address and always removing it (a `finally` step). The app identity never has schema rights.
-3. **Backup settings:** point-in-time retention, geo-redundant backup storage and the long-term policy are set in Bicep (A1) and **verified here** by reading them back.
-4. **Order:** staging database migrated first (the rehearsal), production database migrated only after the approval.
-5. **First admin on Azure.** `deploy/make-admin.sh` works through `docker exec`, which does not exist here. `deploy/azure/make-admin.sh <username>` runs the same validated update against a database as the pipeline identity (or with your own `az login`), and a manual workflow, `make-admin.yml`, runs it for the production database behind the `production` environment's approval. The staging smoke admin (A5) uses the same script against the staging database.
+1. **App user:** `deploy/azure/grant-app-access.sh` (idempotent, run by the pipeline as the server's Entra administrator) creates the database user for the app identity with `db_datareader` and `db_datawriter` only.
+2. **Migration step:** the pipeline copies the self-contained migration bundle **out of the tested `migrate` image** (`docker create` + `docker cp`) and runs it on the runner with `Authentication=Active Directory Default` (the runner's `az login` as the pipeline identity), through a **temporary firewall rule** for the runner's address that is always removed afterwards. The app identity never has schema rights.
+3. **First admin:** `deploy/azure/make-admin.sh <username>` runs the same validated update as `deploy/make-admin.sh`, through `sqlcmd` with Entra authentication; `make-admin.yml` runs it behind the `production` approval.
 
-**Check:** the app identity cannot create a table (a deliberate failing test); the pipeline can; both databases end up with the same schema; the firewall rule list is empty after a run, even after a failed one; `make-admin` promotes a registered user in staging and refuses a bad name.
+**Check:** the app identity cannot create a table (a deliberate failing test); a migration run leaves no firewall rule behind, even when it fails; `make-admin` promotes a registered user and refuses a bad name.
 
-### A4: One image, built once, tested, then published to the registry
+### A4: One image, built once, tested, then published
 
-1. **The image the stack job tested is the image that ships.** The `stack` job of `ci.yml` already builds both targets (through `deploy/deploy.sh`) and tests them (D5). On `master`, after its checks pass, **the same job** scans the two images (a vulnerability scanner; fail on high or critical findings that have a fix), logs in to Azure with OIDC, and **pushes those very images** to ACR tagged with the git SHA. It outputs the pushed **digests**. Nothing is rebuilt for the release: a separate release job that built again would produce a different image, however similar, and "tested" would no longer mean "shipped". Pull requests build and test but never push.
-2. Later jobs (A5) use the **digest**, not the tag. `release.yml` is a **reusable workflow** that `ci.yml` calls on `master` with the two digests; `rollback.yml` and `make-admin.yml` are manual workflows.
-3. A `v*` git tag adds the version tag to the same digest.
-4. Optional: an SBOM and a provenance attestation. A GitHub Actions layer cache if the job gets slow (the stack job has none: D5 results).
+On `master`, after its checks pass, the CI **`stack` job** pushes **the very images it tested** (`bookcart` and `bookcart-migrate`) to `ghcr.io/<owner>/...`, tagged with the git SHA (with `permissions: packages: write`), outputs their **digests**, and calls `release.yml` with them. One vulnerability scan step (Trivy, free) fails the job on critical findings that have a fix. Pull requests build and test but never push.
 
-**Check:** the SHA tag exists in ACR; the digest that was pushed is the one of the image the stack job ran (compare the image ids in the log); the scan result is visible; no password and no `latest` deploys are used; a pull request run pushes nothing.
+**Check:** the SHA tag exists on `ghcr.io`; the pushed digest is the one the stack job ran; a pull-request run pushes nothing.
 
-### A5: The release pipeline (staging, approval, production, rollback)
+#### A4 results (implemented 2026-11-16; the GitHub check waits for the first merge to master)
+
+Files: `.github/workflows/ci.yml` (the `stack` job), `docs/AZURE_SIGNUP_AND_A0_RUNBOOK.md` (step 1). No application or Dockerfile change.
+
+What was built, in the `stack` job after the page checks:
+1. **Find the tested images:** the image of the running `bookcart-app` container (after the second, "update" deployment) must equal `bookcart:latest`, or the job fails ("refusing to publish an untested image").
+2. **Scan the images:** Trivy **0.65.0, pinned by digest** (`aquasec/trivy@sha256:a224...2436`), both images, `--severity CRITICAL --ignore-unfixed --exit-code 1`. Runs on **every** run, pull requests included, so a fixable critical shows before the merge.
+3. **Publish** (only `push` to `master`): `docker login ghcr.io` with the job's `GITHUB_TOKEN` (`permissions: packages: write` on this job only), tag `ghcr.io/<owner lower case>/bookcart:<sha>` and `bookcart-migrate:<sha>`, push, read each **digest**, write them to the job outputs `app_image` and `migrate_image` (for `release.yml`, A5) and to the run summary. No `latest` tag.
+
+Checked locally on 2026-11-16:
+- The scan command against the real images: both **clean** (0 fixable criticals; the app image is Ubuntu 24.04 with .NET 10.0.15). **Negative test:** the same command on `alpine:3.10.0` found 3 fixable criticals and **exited 1**, so the gate works.
+- The publish commands against a throwaway local registry standing in for `ghcr.io`: the outputs have the form `<registry>/<owner>/bookcart@sha256:...`, the owner is lower-cased, and **pulling by the published digest gave exactly the tested image id**. (Docker Desktop's image store makes the digest equal to the image id; on the GitHub runner they differ, which the commands do not depend on.)
+- `actionlint` 1.7.7 (with ShellCheck on the scripts): no findings.
+
+Found while doing it:
+- **The first push of a package decides its owner.** A package created by `docker push` from a PC is not connected to the repository, and the workflow's later pushes are refused. So the A0 runbook no longer pushes from the PC: A0 uses the image CI published. New packages are **private**; make both public once (A0 step 1), because the free web app pulls without credentials.
+
+Not checked yet: the real run on GitHub. After the next merge to `master`: the stack job is green, both packages exist with the commit tag, the summary shows the digests, and the pull-request run before it published nothing.
+
+### A5: The release and the rollback
 
 ```
- release.yml  (reusable; ci.yml calls it on master with the image digests)
- ├─ the image             built, tested and pushed in A4; its digests come in
- ├─ deploy-staging        environment: staging
- │    1  set the staging slot's image to <acr>/bookcart@<digest>
- │    2  migrate BookDB_Staging
- │    3  wait for the slot's /health            (the swap warm-up path)
- │    4  deploy/verify.sh <staging url>         (URL-only mode)
- │    5  scripts/smoke: smoke.js + pages.js     (writes only to the staging database)
- ├─ approve-and-release   environment: production   ◀── waits for you
- │    6  migrate BookDB (production)             (point-in-time restore point noted in the log)
- │    7  swap staging ⇄ production
- │    8  post-swap checks on the production URL  (read-only: verify.sh, pages.js)
- │    9  FAILED?  swap back, re-check, fail the run loudly
- └─ summary               SHA, version, who approved, swap time, check results
- rollback.yml  (manual): swap back, or redeploy a chosen SHA through the same steps
+ release.yml  (reusable; ci.yml calls it on master with the two digests)
+ └─ release      environment: production   ◀── waits for your approval
+      1  note the digest the app runs now               (the rollback target)
+      2  migrate BookDB                                 (A3: temporary firewall rule, always removed)
+      3  point the web app at ghcr.io/...bookcart@<digest>
+      4  wait for /health = Healthy                     (retries for a few minutes: cold container, paused database)
+      5  deploy/verify.sh <url>  +  scripts/smoke/pages.js   (read-only: production is not written to)
+      6  FAILED?  point the app back at the digest from step 1, check again, fail the run loudly
+      7  summary: SHA, digest, who approved, check results
+ rollback.yml  (manual): deploy a chosen earlier SHA through steps 3 to 7
 ```
 
-Work needed: `verify.sh` gets a URL-only mode (it today also uses `docker`); the smoke test's admin is promoted by `deploy/azure/make-admin.sh` (A3) against the staging database as the pipeline identity, through `PROMOTE_ADMIN_CMD`; helper scripts for swap and rollback; `concurrency` so only one release runs.
+Work needed: a URL-only mode for `deploy/verify.sh` (it also uses `docker` today); `concurrency` so only one release runs at a time.
 
-**Check:** a release goes staging → approval → production with no failed request during the swap (a loop of requests runs through it); a deliberately broken build fails at step 4 or 5 and never reaches production; a deliberately failing post-swap check triggers the swap back; the rollback workflow restores the previous version; the run summary names the SHA and the approver.
+**Check:** a merge goes through approval to a running site; a deliberately failing post-release check brings the previous version back by itself; `rollback.yml` restores an earlier SHA; the summary names the SHA and the approver.
 
-### A6: Changes to the application (all off unless configured)
+### A7 (trimmed): backups and the runbook
 
-1. **Telemetry:** add the OpenTelemetry package chosen in A0 and enable it only when `APPLICATIONINSIGHTS_CONNECTION_STRING` is set; keep console logging. Tag telemetry with the slot and the SHA (`OTEL_RESOURCE_ATTRIBUTES`).
-2. **Everything else is configuration** (A1's table). Expected code changes beyond telemetry: none. If A0 shows otherwise (the Azure Files mount permissions, for example), the change goes here and is covered by the same tests.
-3. **Tests:** the existing unit and integration tests unchanged; a test that the application starts and serves with telemetry off (the Docker case).
+1. **Database:** the free database's automatic backups (point-in-time restore; A0 reads the retention in the portal). **A backup cannot be restored into a free database (Microsoft: the free tier applies only to a new database), so any restore creates a paid one.** The drill is a **BACPAC export to your PC** with `sqlpackage` (free) and an import into LocalDB, done once; repeat it before risky migrations. That export is also the off-Azure copy.
+2. **Covers in `/home`:** download them through the app's Kudu file API with your Entra login (`az rest`; basic publishing credentials are off), or accept losing demo covers. A0 or A7 checks that the download works.
+3. **`docs/RUNBOOKS.md`**, short: release and approve, roll back, restore from a BACPAC, promote the first admin, rotate the JWT key, "quota exceeded" (F1 CPU minutes), "database paused until next month" (free amount used), and how to check the cost. One line in `README.md` points to it.
 
-**Check:** CI (including the Docker `stack` job) stays green; with the connection string set, requests, SQL calls, exceptions and logs appear in Application Insights from staging.
+**Check:** the BACPAC round trip was done once and timed; the runbook's rollback was followed once from the text alone.
 
-### A7: Backups, recovery and runbooks
+### A8 (trimmed): monitoring and alerts
 
-1. **Database:** automatic point-in-time restore and long-term retention (set in A1). **Restore drill, done once for real:** restore the production database to a new database at a chosen time, point a test slot at it, confirm the data.
-2. **Uploads and keys (Azure Files):** share snapshots on a schedule or Azure Backup for file shares, soft delete on, and a restore drill (delete a cover, restore it from a snapshot). App Service's own backup does not include the mounts.
-3. **Optional belt and braces:** a scheduled workflow exports a BACPAC of production to a separate storage account with a lifecycle rule (it protects against a bad migration found after the point-in-time window, and against losing the Azure account's data tier).
-4. **`docs/RUNBOOKS.md`:** deploy, approve, roll back, restore the database, restore a file, rotate the JWT key (everybody is signed out) and the Gemini key, rotate the storage key (two-step, as Microsoft describes), what to do when the health check fails, who to call.
+1. **Cost:** the USD 1 budget alert (A1).
+2. **Uptime:** `uptime.yml`, a scheduled workflow every 6 hours that requests `/` (never `/health`, which would wake the database) and fails when the site does not answer; GitHub e-mails you about the failed run.
+3. **Logs and metrics:** the log stream (`az webapp log tail`) and the web app's built-in metrics (requests, HTTP 5xx, CPU time) in the portal. No Log Analytics.
 
-**Check:** both restore drills were performed and timed, and the runbooks were followed by someone other than the author at least once.
+**Check:** stop the app, the next scheduled run fails and the e-mail arrives; start it again.
 
-### A8: Monitoring and alerts
+### Production upgrade path (what a paid production setup would add)
 
-1. **Dashboards/workbook:** request rate, failures, latency, health check status, SQL CPU/DTU and storage, instance memory.
-2. **Alerts to e-mail (an action group):** HTTP 5xx rate, response time, the health check status metric, an availability (ping) test from outside, SQL DTU/CPU and low storage, failed releases (a GitHub notification), certificate and secret expiry, a budget alert on cost.
-3. **Log retention** set deliberately (cost versus need); no personal data or secrets in logs (the app already logs none; checked by a query).
-
-**Check:** each alert fires once on purpose (stop the staging app, hit it with errors, lower a threshold) and arrives.
-
-### A9: Custom domain, TLS and hardening
-
-1. Add the custom domain, DNS records and the free managed certificate; set `Jwt` issuer/audience to the final address; HSTS appears (it is sent for non-localhost hosts).
-2. Staging stays reachable at its `azurewebsites.net` address with **test data only** (it cannot be locked to GitHub's changing addresses without extra services); mark it non-indexable. Restrict the SCM (Kudu) site.
-3. Decide `Security__EnforceCsp` for production (the Docker work already showed no violations).
-4. A security review: the pipeline identity's rights, the app identity's rights, the storage account network rules, Key Vault access, who can approve.
-
-**Check:** `verify.sh` against the production domain passes; an SSL test gives an A-grade result; the default `azurewebsites.net` address redirects or is restricted as decided.
-
-### A10 (optional, when a second instance is needed): scale-out readiness
-
-The shared Azure Files mounts already make covers and keys correct across instances. What remains is **per-instance memory**:
-
-| Item | Today | With 2+ instances | Options |
-|---|---|---|---|
-| Catalogue output cache (5 min) | per instance | an admin's change shows on the other instance after up to 5 minutes | accept; shorten the lifetime; or a shared (Redis) output cache |
-| Rate limits (per client address) | per instance | the real limit becomes N times larger | accept and document; shared limiter; or put limits in front (Front Door/WAF) |
-| AI summary cache | per instance | duplicate paid calls, a little | `IDistributedCache`/HybridCache |
-
-Also: autoscale rules, a minimum of two instances for the Health check to remove a bad one from rotation, and (if you need it) zone redundancy (Premium v3), Azure Front Door with WAF, or a second region. Each is its own small plan; none is started by this one.
-
-
-### First production release, as you will experience it
-
-1. One-time: run the bootstrap, merge the infrastructure pull request, set the secrets in Key Vault.
-2. Merge a change to `master`. CI runs; the image is built, scanned and pushed; staging is deployed, migrated and tested automatically.
-3. GitHub asks you to approve the production release. You approve.
-4. The pipeline migrates production, swaps, checks, and prints the summary. If a check fails, it swaps back by itself.
-5. First time only: register your account on the site, then run the `make-admin` workflow for your username (it waits for your approval too).
-6. Rollback later: run the rollback workflow (or swap back in the portal).
-
-
-### Costs (rough monthly figures, **indicative only: check the Azure pricing calculator for your region and date**)
-
-| Item | Approximate | Notes |
+| Free (this plan) | Production | What it buys |
 |---|---|---|
-| App Service plan S1 (Linux) | about 70 USD | slots included; P0v3 is comparable and has more memory |
-| Azure SQL: S0 production + Basic staging | about 20 USD | scale up when needed; backups included up to the database size, more with long-term retention |
-| Container Registry (Basic) | about 5 USD | |
-| Storage (Azure Files, a few GB) | a few USD | |
-| Key Vault | under 1 USD | |
-| Log Analytics and Application Insights | usage-based, often a few USD at this size | the first GB per month are free; set a daily cap |
-| **Total** | **about 100 to 120 USD per month** | without a CDN/WAF, Redis or a second instance |
+| F1, one instance, restart on release | S1 or P0v3, a staging slot, warm swap, two instances | no downtime on release, a real pre-production check on Azure, no cold start, an SLA |
+| `ghcr.io` public image | Azure Container Registry, pulled with the app's identity | a private image, scanning in Azure |
+| App settings from GitHub secrets | Key Vault references | central rotation, an audit log of secret reads |
+| `/home` storage | Azure Files with snapshots, or Blob storage | backups of uploads, sharing between instances |
+| SQL free offer | S0 or higher, 14 to 35 days point-in-time, long-term retention, geo-redundant backups | an SLA, no pausing, real recovery objectives |
+| Log stream, a 6-hourly ping | Application Insights, Log Analytics, alert rules, availability tests (the skipped A6 and A8 items) | traces, error rates, alerts within minutes |
+| `azurewebsites.net` | a custom domain with a managed certificate, a security review (A9) | your own address |
 
-Part D (the Docker server) costs whatever the server costs: SQL Server 2022 wants at least 2 GB of RAM, so use 4 GB.
+### Costs
 
+**Zero by design.** The only ways to be charged are mistakes: a paid SKU, a restore into a paid database, a resource created outside the plan, or the free database set to "continue and bill" instead of "auto-pause". The budget alert reports any charge above USD 1, and *Cost analysis* is checked at the end of A0, A1 and A5.
 
-### Risks and limits (Azure)
+### Risks and limits (Azure free tier)
 
-- **A0 items may change the design** (the Azure Files permissions, the identity on slots, how the pipeline reaches the database). That is why they come first and why the rest of the plan is written to survive a different answer.
-- **One instance is one instance:** a platform maintenance restart causes a short interruption (the slot swap protects deployments, not platform restarts). Two instances (A10) remove that.
-- **Staging shares the plan's compute** with production, so a heavy test run can slow production a little. Keep the staging tests light or use a second plan.
-- **Staging is publicly reachable** (test data only).
-- **Database changes must be backward compatible**, or a rollback is not safe. This is a rule, not something the tooling can enforce fully; a review checklist and the staging rehearsal are the controls.
-- **Storage keys for the Azure Files mounts** are the only credential type App Service supports; they are stored in the site configuration, not in the repository, and rotated by the documented two-step procedure.
-- **The free SQL tier is not used for production** (no SLA, auto-pause).
-- **Cost:** the figures above are estimates; set the budget alert in A1.
+- **The free quotas are small:** 165 MB of bandwidth and the CPU-minute quota on F1, 100,000 vCore-seconds on the database. A demo fits; a link shared widely does not. When a quota is used up the site or the database stops until it resets; nothing is charged.
+- **Cold starts and the daily CPU quota** make the site slow after a quiet spell and unavailable for the rest of the day if the quota is exhausted. Acceptable for a demo; it is what the free tier is.
+- **The free database pauses** when idle and **stops until next month** when its free amount is used up. Nothing may query it on a timer.
+- **A release restarts the app** (a short outage); there is no Azure staging, so the CI stack job is the only pre-production test.
+- **After the 30-day trial** the subscription must be upgraded to pay-as-you-go to keep running; from then on only the budget alert protects against a mistake.
+- **No SLA** for anything in this design.
+- **Database changes must be backward compatible**, or a rollback is not safe.
 
 ---
 
 ## 6. Not in this plan
 
-Kubernetes or Container Apps; multi-region or zone-redundant hosting; a CDN or WAF (Azure Front Door); a shared cache; autoscaling beyond a note; private networking (virtual network, private endpoints) and self-hosted runners; a staging environment in a separate subscription; e-mail sending; a seeded admin account (the first admin is promoted by a command in both targets); changing the application's features (the one optional code change is telemetry, A6).
+Kubernetes; multi-region or zone-redundant hosting; a CDN or WAF (Azure Front Door); a shared cache; autoscaling; private networking (virtual network, private endpoints) and self-hosted runners; e-mail sending; a seeded admin account (the first admin is promoted by a command in both targets); changing the application's features.
+
+Skipped from Part A on 2026-11-16 (a free study deployment does not need them; the "Production upgrade path" table in Part A says what each would add): an Azure staging slot and swap, Azure Container Registry, Key Vault, Azure Files, Application Insights and Log Analytics (A6 telemetry), a custom domain and the hardening review (A9), scale-out (A10), SBOM and provenance attestations, the registry purge task, the Azure half of D6.
 
 Specific to Part D: a container registry (the server builds from source: that is the decision for the Docker target), managed cloud services, and automatic off-host backups (copying `deploy/backups` off the host is manual, D6).
 
 ## 7. Order and effort
 
-**Done:** D0 to D5 and the Docker half of D6 (about two and a half working days).
+**Done:** D0 to D5 and the Docker half of D6 (about two and a half working days), and the D6 follow-up of 2026-11-15 (`ContainerRepository` removed, `ENFORCE_CSP` passed through Compose).
 
-**Next, in this order:**
-1. ~~D6, the Docker half~~ **done 2026-11-10.**
-2. **A0**, the Azure spike (about 1 day; it can change later A phases).
-3. **A1 to A5** (about 1.5, 1, 1, 1 and 2 days; A4 is now a day because it also changes the stack job), then **A6** (about 1 day), then **A7 to A9** (about 1, 1 and 0.5 days), and the **Azure half of D6** together with A7 (about half a day).
+**Next, in this order** (estimates, not measurements):
 
-That is about **11 working days** for a first Azure production release (estimates, not measurements), plus A10 (2 to 4 days) only if a second instance is needed. D7 only on request. Each phase is one commit or pull request, reviewed and stopped at; any phase can be reverted on its own.
+1. ~~Rewrite the A1 Bicep draft and the A0 runbook for the free design~~ **written 2026-11-16**; still to do: compile the Bicep once the Bicep CLI is installed.
+2. Sign up for Azure (the 30-day clock starts here), then **A0** by hand (about 1 day).
+3. **A1** (about 1 day), **A2** (1), **A3** (1), **A4** (0.5), **A5** (1.5).
+4. **A7** and **A8**, trimmed (about half a day each).
+
+That is about **7 working days** for a running, CI/CD-released application on Azure at zero cost. D7 only on request. Each phase is one commit or pull request, reviewed and stopped at; any phase can be reverted on its own.

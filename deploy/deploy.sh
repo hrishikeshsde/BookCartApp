@@ -104,6 +104,7 @@ SA_PASSWORD=$sa_password
 JWT_SECRET=$jwt_secret
 GEMINI_API_KEY=
 MSSQL_PID=Express
+ENFORCE_CSP=false
 EOF
   )
   chmod 600 "$ENV_FILE" 2> /dev/null || true

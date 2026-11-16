@@ -86,7 +86,7 @@ If a script answers "Permission denied", run it through bash: `bash deploy/deplo
 
 **HTTP and HTTPS:** with a domain, Caddy gets and renews a Let's Encrypt certificate and is the only way in (the app listens on `127.0.0.1` only); without one, the app is published on port 8080 in plain HTTP, which is fine for a demo or a private network. The Compose stack runs SQL Server in the free Express edition (the Developer edition is not licensed for production) with the `sa` account, which suits one machine but not a shared server.
 
-**Content-Security-Policy:** the site sends it in report-only mode. A browser check of every page type found no violations, so it can be enforced; the Docker setup keeps it report-only for now (set `Security__EnforceCsp=true` on the app to enforce it).
+**Content-Security-Policy:** the site sends it in report-only mode. A browser check of every page type found no violations, so it can be enforced; the Docker setup keeps it report-only by default. Set `ENFORCE_CSP=true` in `deploy/.env` and run `./deploy/deploy.sh` again to enforce it (when running the image yourself, set `Security__EnforceCsp=true`).
 
 ## Running the image yourself
 

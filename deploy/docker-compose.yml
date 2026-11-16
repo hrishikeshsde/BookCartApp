@@ -78,6 +78,8 @@ services:
       # headers (the rate limits are per client address, and the guest cookie is Secure only when the request is https).
       # Safe because in that mode the app's port is bound to the loopback address and only Caddy can reach it.
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: ${FORWARDED_HEADERS:-false}
+      # true enforces the Content-Security-Policy (it is only reported while false). The built site produces no violations.
+      Security__EnforceCsp: ${ENFORCE_CSP:-false}
     ports:
       - "${APP_BIND:-0.0.0.0}:${APP_PORT:-8080}:8080"
     volumes:

@@ -10,8 +10,6 @@
     <!-- XML comments on controllers become the descriptions in the OpenAPI document. CS1591 (undocumented public member) is not wanted. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
-    <!-- Container image (dotnet publish -t:PublishContainer): the name, and a port above 1024 so it can run as a non-root user. -->
-    <ContainerRepository>bookcart</ContainerRepository>
     <!-- The XML file is only needed at build time (it feeds the OpenAPI document); the running app does not read it. -->
     <PublishDocumentationFile>false</PublishDocumentationFile>
   </PropertyGroup>

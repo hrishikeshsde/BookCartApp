@@ -1,5 +1,7 @@
 # Azure sign-up guide and A0 spike runbook
 
+> **Superseded in part (2026-11-16).** Part A was rescoped to the free tier (see the plan). Sections 1 to 4 (the free account, sign-up, cost safety, tools) still apply. **Sections 5 and 6 were written for the paid design (S1, a container registry, Azure Files) and must not be run**: they are rewritten for the free design (F1, the SQL free tier, `ghcr.io`, a by-hand first deployment) together with A1.
+
 This is the hands-on companion to phase **A0** of `DEPLOYMENT_IMPLEMENTATION_PLAN.md`. It covers creating the Azure free account safely and then running the nine A0 checks on a throwaway resource group, with the exact commands. Nothing here has been run yet: **no Azure account exists**, and the commands are written from Microsoft's documentation, so each one is marked "verify" where A0 is supposed to prove it. If a command fails, that is a finding: record it in the plan, do not force it.
 
 Decisions this runbook follows (answered 2026-11-13):
@@ -157,6 +159,8 @@ az webapp identity assign -g $RG -n $APP --slot staging --identities $APP_ID_RES
 az webapp config set -g $RG -n $APP --slot staging \
   --generic-configurations "{\"acrUseManagedIdentityCreds\": true, \"acrUserManagedIdentityID\": \"$APP_ID_CLIENT\"}"
 ```
+
+First check how the registry grants access: `az acr show -n $ACR --query roleAssignmentMode -o tsv`. If it says an ABAC mode, `AcrPull` is ignored: use the role `Container Registry Repository Reader` instead (and `Container Registry Repository Writer` for pushing), and tell me, because `infra/modules/registry.bicep` assumes plain RBAC.
 
 **Pass:** `az webapp log tail -g $RG -n $APP` shows the container pulled and started (it will fail to be healthy until step 4 sets its settings: that is fine). Do the same for the staging slot with `--slot staging`. Record both. (If the pull is refused with an authentication error, check ARM-audience tokens on the registry: `az acr config authentication-as-arm show -r $ACR`, and enable it if it is off; verify.)
 

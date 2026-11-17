@@ -10,9 +10,11 @@ on:
 permissions:
   contents: read
 
+# A newer push cancels an older run of the same branch, except on master: a master run can be releasing (migrating the
+# database), which must never be cut off. Master runs queue instead.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
   backend:
@@ -185,3 +187,17 @@ jobs:
       - name: Stop the stack and delete its data
         if: always()
         run: docker compose --env-file deploy/.env -f deploy/docker-compose.yml --profile '*' down -v || true
+
+  # Plan A5: release the published images to Azure, after your approval (release.yml). Switched on by the repository
+  # variable AZURE_RELEASE_ENABLED=true once the Azure environment exists (A1, A2); until then this job is skipped.
+  release:
+    name: Release
+    needs: [stack]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && vars.AZURE_RELEASE_ENABLED == 'true'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/release.yml
+    with:
+      app_image: ${{ needs.stack.outputs.app_image }}
+      migrate_image: ${{ needs.stack.outputs.migrate_image }}

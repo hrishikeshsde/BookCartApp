@@ -1,0 +1,81 @@
+# Puts an earlier release back on the Azure web app, by hand (plan A5). Behind the same approval as a release.
+#
+# Give the commit id (or its first 7+ characters) of a release that CI published: its image is
+# ghcr.io/<owner>/bookcart:<full commit id>. The database is NOT migrated back: migrations are backward compatible
+# (plan A5), so an earlier version runs on the newer schema. Needs the same variables as release.yml.
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Commit id of the release to put back (as on the release's run summary)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: release-production
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Roll back to an earlier release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment:
+      name: production
+      url: ${{ steps.switch.outputs.url }}
+    env:
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
+      COMMIT: ${{ inputs.commit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # A short id is resolved to the full one in this repository's history; only a published release has an image.
+      - name: Find the release image
+        id: image
+        run: |
+          [[ $COMMIT =~ ^[0-9a-fA-F]{7,40}$ ]] || { echo "::error::'$COMMIT' is not a commit id."; exit 1; }
+          full=$(git rev-parse --verify --quiet "$COMMIT^{commit}") || { echo "::error::Commit $COMMIT is not in this repository."; exit 1; }
+          tag="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/bookcart:$full"
+          docker pull --quiet "$tag" > /dev/null || { echo "::error::No published image $tag (only commits that CI published on master can be rolled back to)."; exit 1; }
+          digest=$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$tag" | grep "^ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/bookcart@sha256:")
+          echo "image=$digest" >> "$GITHUB_OUTPUT"
+          echo "Rolling back to $full = $digest"
+      - name: Sign in to Azure (OIDC, as the pipeline identity)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Switch the app to that image
+        id: switch
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          echo "previous=$(bash deploy/azure/switch-image.sh --current)" >> "$GITHUB_OUTPUT"
+          bash deploy/azure/switch-image.sh "$IMAGE"
+          echo "url=https://$(az webapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_WEBAPP_NAME" --query defaultHostName -o tsv)" >> "$GITHUB_OUTPUT"
+      - name: Check the site (verify.sh --remote)
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+        run: bash deploy/verify.sh --remote "${{ steps.switch.outputs.url }}" --image "$IMAGE"
+      - name: Summary
+        if: always()
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+          PREVIOUS_IMAGE: ${{ steps.switch.outputs.previous }}
+          OUTCOME: ${{ job.status }}
+        run: |
+          {
+            echo "### Rollback: $OUTCOME"
+            echo "- To commit \`$COMMIT\`: \`$IMAGE\`"
+            echo "- Replaced: \`$PREVIOUS_IMAGE\`"
+            echo "- Started by $GITHUB_ACTOR"
+          } >> "$GITHUB_STEP_SUMMARY"

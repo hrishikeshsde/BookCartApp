@@ -141,7 +141,7 @@ Shared building blocks (built once in Part D, reused by Part A):
 | `.github/workflows/ci.yml` | A | the stack job scans and pushes the images it tested on `master` and calls `release.yml` | A4 |
 | `.github/workflows/release.yml` | A | reusable: approval, migrate, switch the image, check, roll back on failure | A5 |
 | `.github/workflows/rollback.yml`, `make-admin.yml`, `uptime.yml` | A | manual rollback to a SHA; the first admin behind the approval; the 6-hourly uptime check | A5, A3, A8 |
-| `deploy/azure/*.sh` | A | database user setup, migration step, `make-admin` | A3 |
+| `deploy/azure/*.sh` | A | `migrate.sh` and `switch-image.sh` (written 2026-11-17 with A5); database user setup and `make-admin` | A5, A3 |
 | `deploy/verify.sh` | A | a mode that checks only a URL (no `docker` commands) | A5 |
 | `docs/AZURE_SIGNUP_AND_A0_RUNBOOK.md` | A | sign-up guide and the by-hand first deployment (rewritten for the free design) | A0 |
 | `docs/RUNBOOKS.md`, one line in `README.md` | A | release, roll back, restore, rotate the JWT key, free-tier limits | A7 |
@@ -813,6 +813,52 @@ Found while doing it:
 Work needed: a URL-only mode for `deploy/verify.sh` (it also uses `docker` today); `concurrency` so only one release runs at a time.
 
 **Check:** a merge goes through approval to a running site; a deliberately failing post-release check brings the previous version back by itself; `rollback.yml` restores an earlier SHA; the summary names the SHA and the approver.
+
+#### A5 results, part 1: `deploy/verify.sh --remote` (done 2026-11-16, no Azure needed)
+
+The release workflow and the rollback (the rest of A5) need Azure; this part did not.
+
+New usage: `deploy/verify.sh --remote <base-url> [--image <ref>]`. Without `--remote` the script is unchanged (a Docker host, `deploy/.env`, the running container).
+- `--remote` uses only what the URL shows: no `docker`, no `deploy/.env`. The container health, SQL Server port, Caddy and port-binding checks are reported as `skip`. Requests may take up to 120 s (a sleeping free app, a paused free database). For an `https://` site that is not `localhost`, it also checks that `http://` redirects to `https://`.
+- `--image <ref>` takes the build's files from that image (`docker create`, `docker cp`, the container is never started and always removed), so the pages are compared byte for byte and the build's self-check (`verify-static`) runs on them. That is how the release proves the site serves **the digest it deployed**. Without `--image`, the pages are checked for status 200 and `text/html` only.
+- Clear errors for wrong use (no URL, `--image` without `--remote`, a URL without `http(s)://`, an unknown option, two URLs) and a missing `curl`.
+
+Tested on 2026-11-16 against the local Docker stack:
+
+| Test | Result |
+|---|---|
+| Local mode, before and after the change | identical: 22 ok, exit 0 (one heading reworded) |
+| `--remote http://localhost:8080` | 19 ok, 4 skip, exit 0 |
+| `--remote ... --image bookcart:latest` (the image the site runs) | 20 ok (all 8 pages identical, `verify-static` passes), exit 0 |
+| `--remote ... --image` the CI image on `ghcr.io` (digest `75c4458...`) | **5 failures, exit 1**: the local site is a build of `57855cc` from a Windows checkout and the CI image a build of `f1aa3dc` from Linux; the client shell differs only in line endings, a real difference the check is meant to catch |
+| No site at the address | 19 failures, exit 1 |
+| `--image` with no web files (the migrate image), or a tag that does not exist | one clear failure each, exit 1 |
+| No `docker` and no `node` on the PATH | without `--image`: 19 ok, exit 0; with `--image`: "needs docker", exit 1 |
+| No `curl` | "curl is needed and was not found", exit 1 |
+| The redirect test, same command, on github.com and example.com | `301 https://...` passes; `200` fails |
+| ShellCheck 0.10.0 on `verify.sh` and `lib.sh` | clean |
+
+No temporary container or work folder is left behind after any of them.
+
+#### A5 results, part 2: the release and rollback workflows (written 2026-11-17; they run only once Azure exists)
+
+Files: `.github/workflows/release.yml` (new, reusable), `.github/workflows/rollback.yml` (new, manual), `.github/workflows/ci.yml` (calls the release; concurrency), `deploy/azure/migrate.sh` and `deploy/azure/switch-image.sh` (new, executable; the logic both workflows share).
+
+- **`release.yml`**, called by `ci.yml` on `master` with the digests from A4. One job in the environment `production`, so it **waits for your approval** before it can sign in to Azure. Steps: check the inputs (both images by digest); sign in with OIDC (`azure/login@v2`); note the site and **the image running now** (the rollback target); **migrate** (`migrate.sh`); **switch** (`switch-image.sh`); **check** the live site with `verify.sh --remote --image <the deployed digest>` (A5.1) and `pages.js` in Chrome, both read-only; **roll back** by itself if anything after the switch failed (switch to the noted image, check, fail the run loudly); a **summary** (commit, site, new image, migration image, previous image). A failed migration stops before the switch, so the running version is untouched. Concurrency `release-production`, never cancelled.
+- **`rollback.yml`**, manual, input = a commit id (short or full). It resolves it in the repository, pulls `ghcr.io/<owner>/bookcart:<commit>` (only a commit CI published can be chosen), switches to that **digest** behind the same approval, checks it with `verify.sh --remote --image`, and writes a summary. The database is not migrated back (migrations are backward compatible).
+- **`migrate.sh`** copies the bundle **out of the tested `migrate` image** (never rebuilt), opens a firewall rule for the runner's IPv4 address, runs the bundle with `Authentication=Active Directory Default` (the runner's `az login`, i.e. the pipeline identity: no password), retries three times (a paused free database takes up to a minute to resume), and **always removes the rule** (an error tells how to remove it by hand if that fails). This is A3's "migration step", written now because the release needs it.
+- **`switch-image.sh`** sets the image (`az webapp config container set`), checks the setting took, **restarts the app** and waits up to 15 minutes for `/health`. The restart matters: App Service keeps serving the old container while a new one starts, so without it a healthy answer could still come from the old version. On F1 (no slots) the restart is the accepted short outage. `--current` prints the image the app is set to.
+- **`ci.yml`**: a `release` job (`uses: ./.github/workflows/release.yml`, `id-token: write`) runs only on a push to `master` **and when the repository variable `AZURE_RELEASE_ENABLED` is `true`**, so until Azure exists `master` stays green and the job shows as skipped. Concurrency: a newer push still cancels an older run on other branches, but **master runs now queue** instead of cancelling, because a master run can be in the middle of a migration.
+
+Variables the release needs (set in A2, from the A1 outputs; identifiers, not secrets): `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP`, `AZURE_WEBAPP_NAME`, `AZURE_SQL_SERVER`, and `AZURE_RELEASE_ENABLED=true` last.
+
+Checked on 2026-11-17, without Azure:
+- **actionlint 1.7.7** on every workflow (`ci.yml`, `release.yml`, `rollback.yml`): no findings (the reusable-workflow call, its inputs and outputs, and the job permissions included).
+- **ShellCheck 0.10.0** on `migrate.sh`, `switch-image.sh`, `verify.sh`, `lib.sh`: clean. Its only remark was SC2317 on `migrate.sh`'s `cleanup` (it cannot see the `EXIT` trap); that function is marked, the rule is not turned off for the file.
+- Both scripts stop with a clear message when their settings are missing.
+- **`migrate.sh` with the real published image** (`bookcart-migrate@sha256:07449a3a...`) on a machine without `az`: it pulled the image, copied `/app/efbundle` out and made it executable, then stopped at the first Azure command; the cleanup removed the temporary container and folder and, correctly, tried no firewall-rule removal (none was created). No container or folder was left behind.
+
+Waits for Azure: the A5 Check above (an approval, a real release, a forced post-release failure that rolls back by itself, `rollback.yml` to an earlier commit).
 
 ### A7 (trimmed): backups and the runbook
 

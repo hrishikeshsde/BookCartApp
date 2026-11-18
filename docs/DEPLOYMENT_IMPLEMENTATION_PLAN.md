@@ -19,7 +19,7 @@ This document merges two earlier ones: the Docker plan (written first, and mostl
 | D5 | A CI job that deploys the stack and checks it | **Done** 2026-10-25, **confirmed on GitHub** 2026-11-10 (the pull-request run #19 and the merge run #20 were green; the `stack` job took 2 min 54 s on a cold cache) |
 | D6 | Documentation and tidy-up, **both targets** | **Docker half done** 2026-11-10 (README, `CLAUDE.md`, F7-5 closed, executable bits); follow-up 2026-11-15 (`ContainerRepository` removed, `ENFORCE_CSP`). The Azure half is **skipped** (2026-11-16: `docs/RUNBOOKS.md` from A7 and one README line replace it) |
 | D7 | Optional: a limited SQL login for the Docker target | Not started, optional |
-| A0 to A8 | Azure free tier: the by-hand first deployment, Bicep, GitHub trust, database access, image publishing, release and rollback, trimmed backups and runbook, trimmed monitoring | Not started. **Rescoped 2026-11-16 to zero cost** (A6, A9, A10 skipped; A7, A8 trimmed). The `infra/` draft of 2026-11-15 was written for the paid design and is rewritten in A1 |
+| A0 to A8 | Azure free tier: the by-hand first deployment, Bicep, GitHub trust, database access, image publishing, release and rollback, trimmed backups and runbook, trimmed monitoring | **A4 done 2026-11-16** (confirmed on GitHub); the rest not started (the Microsoft account sign-up is blocked for now). **Rescoped 2026-11-16 to zero cost** (A6, A9, A10 skipped; A7, A8 trimmed). The `infra/` draft of 2026-11-15 was written for the paid design and is rewritten in A1 |
 
 ## 2. Requirement and decisions
 
@@ -141,7 +141,7 @@ Shared building blocks (built once in Part D, reused by Part A):
 | `.github/workflows/ci.yml` | A | the stack job scans and pushes the images it tested on `master` and calls `release.yml` | A4 |
 | `.github/workflows/release.yml` | A | reusable: approval, migrate, switch the image, check, roll back on failure | A5 |
 | `.github/workflows/rollback.yml`, `make-admin.yml`, `uptime.yml` | A | manual rollback to a SHA; the first admin behind the approval; the 6-hourly uptime check | A5, A3, A8 |
-| `deploy/azure/*.sh` | A | database user setup, migration step, `make-admin` | A3 |
+| `deploy/azure/*.sh` | A | `migrate.sh`, `switch-image.sh` (A5); `lib.sh`, `install-sqlcmd.sh`, `grant-app-access.sh`, `make-admin.sh` (A3); all written and tested 2026-11-17 | A3, A5 |
 | `deploy/verify.sh` | A | a mode that checks only a URL (no `docker` commands) | A5 |
 | `docs/AZURE_SIGNUP_AND_A0_RUNBOOK.md` | A | sign-up guide and the by-hand first deployment (rewritten for the free design) | A0 |
 | `docs/RUNBOOKS.md`, one line in `README.md` | A | release, roll back, restore, rotate the JWT key, free-tier limits | A7 |
@@ -770,13 +770,33 @@ The image is a parameter. The infra workflow (A2) reads the image the app curren
 
 **Check:** the app identity cannot create a table (a deliberate failing test); a migration run leaves no firewall rule behind, even when it fails; `make-admin` promotes a registered user and refuses a bad name.
 
+#### A3 results (written and tested 2026-11-17 without Azure; the Azure run waits for A0/A1)
+
+Files (all in `deploy/azure/` unless noted; scripts executable except the sourced `lib.sh`):
+- **`lib.sh`** (new, shared): `sql_fqdn`, `open_sql_firewall` / `close_sql_firewall` (a temporary rule for this machine's IPv4 address; closing is safe to call twice and reports a failure loudly with the command to fix it by hand), `run_sql` (one T-SQL batch with go-sqlcmd and `--authentication-method ActiveDirectoryDefault`, i.e. the `az login` identity; three attempts, because the free database may be resuming). `migrate.sh` (A5) now uses it, so the firewall logic exists once.
+- **`install-sqlcmd.sh`** (new): go-sqlcmd **v1.10.0**, downloaded from Microsoft's GitHub release and **checked against its SHA-256** (`92516d98...`, matched by hashing the file) before it is installed. The Ubuntu 24.04 runner image has no sqlcmd.
+- **`grant-app-access.sh`** (new): creates the app identity's database user if missing, adds `db_datareader` and `db_datawriter` if missing, then prints its roles and **fails if it has `db_owner`, `db_ddladmin`, `db_securityadmin` or `db_accessadmin`**. This replaces the plan's "the app cannot create a table" test, which would need to sign in as the app's identity: the role check proves the same from the pipeline.
+- **`make-admin.sh`** (new): the Azure twin of `deploy/make-admin.sh`, same name rule (`^[A-Za-z0-9_.@-]{1,50}$`, the defence against injection), one batch that looks before it changes (so a retry cannot do harm): `missing` (error), `already`, or `changed:1`.
+- **`.github/workflows/make-admin.yml`** (new, manual, input `username`, environment `production` = your approval; the name is passed through an environment variable, never pasted into the script).
+- **`.github/workflows/release.yml`**: after the migration it installs sqlcmd and runs `grant-app-access.sh` on **every** release (idempotent; a fresh A1 database gets its app user on the first release). The identity name is the variable `AZURE_APP_IDENTITY`, default `id-bookcart-app`.
+
+**Design change found in Microsoft's documentation (CREATE USER, 2026-11-17).** The plan's `CREATE USER ... FROM EXTERNAL PROVIDER` (with or without `WITH OBJECT_ID`) makes the SQL server look the identity up in Microsoft Entra; when a **service principal** (our pipeline identity) runs it, the server's own identity needs the Entra **Directory Readers** role, which only a tenant administrator can grant. `WITH OBJECT_ID` is documented as a repair for duplicate display names, not as a way around the lookup. The script therefore uses Microsoft's documented form **without validation**: `CREATE USER [id-bookcart-app] WITH SID = <the identity's CLIENT id as 16 bytes>, TYPE = E` (the documentation says to use the client id, not the object id, for a user-assigned identity). The statement is built as text and run with `EXEC`, because `SID` needs a binary literal. This resolves A0 item 4 on paper; A0 or the first release confirms it on Azure.
+
+Tested on 2026-11-17:
+- `install-sqlcmd.sh` in a fresh **Ubuntu 24.04** container: installs and runs `sqlcmd v1.10.0`; a copy with a wrong checksum is **refused** and installs nothing.
+- `grant-app-access.sh` and `make-admin.sh` **with the real go-sqlcmd against real SQL Server**, in a scratch database `A3_Test` in the local stack's SQL container (dropped afterwards; `BookDB` untouched). Only `az`, the IP lookup and the Entra sign-in (replaced by `sa`) were stubbed; the stub logged every firewall call. **11 of 11 passed:** the SID expression gives a 16-byte literal; first grant adds both roles; a second grant changes nothing; a user with `db_ddladmin` is **refused**; a bad identity name is rejected before anything runs; `make-admin` promotes a user, reports "already" twice, fails for an unknown user, rejects an injection attempt and a missing argument. **Every run that opened the firewall closed it, including the failing ones.** (The first run of the tests failed on the grant: SQL Server parses a whole batch before running it, and on-premises SQL Server 2022 does not know the Azure-only `CREATE USER` syntax; the `EXEC` form fixed that too.)
+- `migrate.sh` after the change to `lib.sh`, with the real published migrate image: bundle copied out, stops at the first Azure command here, cleanup ran, no container or folder left.
+- actionlint (all four workflows) and ShellCheck (all nine deployment scripts): clean.
+
+Waits for Azure: the user creation with `WITH SID ... TYPE = E` on Azure SQL, the app connecting as that user, and `make-admin.yml` behind the approval.
+
 ### A4: One image, built once, tested, then published
 
 On `master`, after its checks pass, the CI **`stack` job** pushes **the very images it tested** (`bookcart` and `bookcart-migrate`) to `ghcr.io/<owner>/...`, tagged with the git SHA (with `permissions: packages: write`), outputs their **digests**, and calls `release.yml` with them. One vulnerability scan step (Trivy, free) fails the job on critical findings that have a fix. Pull requests build and test but never push.
 
 **Check:** the SHA tag exists on `ghcr.io`; the pushed digest is the one the stack job ran; a pull-request run pushes nothing.
 
-#### A4 results (implemented 2026-11-16; the GitHub check waits for the first merge to master)
+#### A4 results (done 2026-11-16: implemented, checked locally, and confirmed on GitHub)
 
 Files: `.github/workflows/ci.yml` (the `stack` job), `docs/AZURE_SIGNUP_AND_A0_RUNBOOK.md` (step 1). No application or Dockerfile change.
 
@@ -793,7 +813,7 @@ Checked locally on 2026-11-16:
 Found while doing it:
 - **The first push of a package decides its owner.** A package created by `docker push` from a PC is not connected to the repository, and the workflow's later pushes are refused. So the A0 runbook no longer pushes from the PC: A0 uses the image CI published. New packages are **private**; make both public once (A0 step 1), because the free web app pulls without credentials.
 
-Not checked yet: the real run on GitHub. After the next merge to `master`: the stack job is green, both packages exist with the commit tag, the summary shows the digests, and the pull-request run before it published nothing.
+**Confirmed on GitHub (2026-11-16):** pull-request run #23 (`54bc9b3`, https://github.com/hrishikeshsde/BookCartApp/actions/runs/43846112642): stack job green, "Find the tested images" and "Scan the images" passed, **"Publish" skipped**. Merge run #24 on `master` (`f1aa3dc`, https://github.com/hrishikeshsde/BookCartApp/actions/runs/43846216209): stack job green in about 3 minutes, **"Publish" succeeded**. Both packages are public: asked anonymously, `ghcr.io/hrishikeshsde/bookcart:f1aa3dc8ec095a1eee586851394dc10339fff55e` resolves to `sha256:75c4458572d1c70b71548b7297bd8c4c0275e62ef2441fc0721aa9418eddf2a9` and `bookcart-migrate` to `sha256:07449a3a2c9bb51ccf8714d859630e0a960b9b71ce3aea64edfcd85d7daeaf82`, and the owner pulled both without a login. Those are the digests `release.yml` (A5) will deploy.
 
 ### A5: The release and the rollback
 
@@ -813,6 +833,52 @@ Not checked yet: the real run on GitHub. After the next merge to `master`: the s
 Work needed: a URL-only mode for `deploy/verify.sh` (it also uses `docker` today); `concurrency` so only one release runs at a time.
 
 **Check:** a merge goes through approval to a running site; a deliberately failing post-release check brings the previous version back by itself; `rollback.yml` restores an earlier SHA; the summary names the SHA and the approver.
+
+#### A5 results, part 1: `deploy/verify.sh --remote` (done 2026-11-16, no Azure needed)
+
+The release workflow and the rollback (the rest of A5) need Azure; this part did not.
+
+New usage: `deploy/verify.sh --remote <base-url> [--image <ref>]`. Without `--remote` the script is unchanged (a Docker host, `deploy/.env`, the running container).
+- `--remote` uses only what the URL shows: no `docker`, no `deploy/.env`. The container health, SQL Server port, Caddy and port-binding checks are reported as `skip`. Requests may take up to 120 s (a sleeping free app, a paused free database). For an `https://` site that is not `localhost`, it also checks that `http://` redirects to `https://`.
+- `--image <ref>` takes the build's files from that image (`docker create`, `docker cp`, the container is never started and always removed), so the pages are compared byte for byte and the build's self-check (`verify-static`) runs on them. That is how the release proves the site serves **the digest it deployed**. Without `--image`, the pages are checked for status 200 and `text/html` only.
+- Clear errors for wrong use (no URL, `--image` without `--remote`, a URL without `http(s)://`, an unknown option, two URLs) and a missing `curl`.
+
+Tested on 2026-11-16 against the local Docker stack:
+
+| Test | Result |
+|---|---|
+| Local mode, before and after the change | identical: 22 ok, exit 0 (one heading reworded) |
+| `--remote http://localhost:8080` | 19 ok, 4 skip, exit 0 |
+| `--remote ... --image bookcart:latest` (the image the site runs) | 20 ok (all 8 pages identical, `verify-static` passes), exit 0 |
+| `--remote ... --image` the CI image on `ghcr.io` (digest `75c4458...`) | **5 failures, exit 1**: the local site is a build of `57855cc` from a Windows checkout and the CI image a build of `f1aa3dc` from Linux; the client shell differs only in line endings, a real difference the check is meant to catch |
+| No site at the address | 19 failures, exit 1 |
+| `--image` with no web files (the migrate image), or a tag that does not exist | one clear failure each, exit 1 |
+| No `docker` and no `node` on the PATH | without `--image`: 19 ok, exit 0; with `--image`: "needs docker", exit 1 |
+| No `curl` | "curl is needed and was not found", exit 1 |
+| The redirect test, same command, on github.com and example.com | `301 https://...` passes; `200` fails |
+| ShellCheck 0.10.0 on `verify.sh` and `lib.sh` | clean |
+
+No temporary container or work folder is left behind after any of them.
+
+#### A5 results, part 2: the release and rollback workflows (written 2026-11-17; they run only once Azure exists)
+
+Files: `.github/workflows/release.yml` (new, reusable), `.github/workflows/rollback.yml` (new, manual), `.github/workflows/ci.yml` (calls the release; concurrency), `deploy/azure/migrate.sh` and `deploy/azure/switch-image.sh` (new, executable; the logic both workflows share).
+
+- **`release.yml`**, called by `ci.yml` on `master` with the digests from A4. One job in the environment `production`, so it **waits for your approval** before it can sign in to Azure. Steps: check the inputs (both images by digest); sign in with OIDC (`azure/login@v2`); note the site and **the image running now** (the rollback target); **migrate** (`migrate.sh`); **switch** (`switch-image.sh`); **check** the live site with `verify.sh --remote --image <the deployed digest>` (A5.1) and `pages.js` in Chrome, both read-only; **roll back** by itself if anything after the switch failed (switch to the noted image, check, fail the run loudly); a **summary** (commit, site, new image, migration image, previous image). A failed migration stops before the switch, so the running version is untouched. Concurrency `release-production`, never cancelled.
+- **`rollback.yml`**, manual, input = a commit id (short or full). It resolves it in the repository, pulls `ghcr.io/<owner>/bookcart:<commit>` (only a commit CI published can be chosen), switches to that **digest** behind the same approval, checks it with `verify.sh --remote --image`, and writes a summary. The database is not migrated back (migrations are backward compatible).
+- **`migrate.sh`** copies the bundle **out of the tested `migrate` image** (never rebuilt), opens a firewall rule for the runner's IPv4 address, runs the bundle with `Authentication=Active Directory Default` (the runner's `az login`, i.e. the pipeline identity: no password), retries three times (a paused free database takes up to a minute to resume), and **always removes the rule** (an error tells how to remove it by hand if that fails). This is A3's "migration step", written now because the release needs it.
+- **`switch-image.sh`** sets the image (`az webapp config container set`), checks the setting took, **restarts the app** and waits up to 15 minutes for `/health`. The restart matters: App Service keeps serving the old container while a new one starts, so without it a healthy answer could still come from the old version. On F1 (no slots) the restart is the accepted short outage. `--current` prints the image the app is set to.
+- **`ci.yml`**: a `release` job (`uses: ./.github/workflows/release.yml`, `id-token: write`) runs only on a push to `master` **and when the repository variable `AZURE_RELEASE_ENABLED` is `true`**, so until Azure exists `master` stays green and the job shows as skipped. Concurrency: a newer push still cancels an older run on other branches, but **master runs now queue** instead of cancelling, because a master run can be in the middle of a migration.
+
+Variables the release needs (set in A2, from the A1 outputs; identifiers, not secrets): `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP`, `AZURE_WEBAPP_NAME`, `AZURE_SQL_SERVER`, and `AZURE_RELEASE_ENABLED=true` last.
+
+Checked on 2026-11-17, without Azure:
+- **actionlint 1.7.7** on every workflow (`ci.yml`, `release.yml`, `rollback.yml`): no findings (the reusable-workflow call, its inputs and outputs, and the job permissions included).
+- **ShellCheck 0.10.0** on `migrate.sh`, `switch-image.sh`, `verify.sh`, `lib.sh`: clean. Its only remark was SC2317 on `migrate.sh`'s `cleanup` (it cannot see the `EXIT` trap); that function is marked, the rule is not turned off for the file.
+- Both scripts stop with a clear message when their settings are missing.
+- **`migrate.sh` with the real published image** (`bookcart-migrate@sha256:07449a3a...`) on a machine without `az`: it pulled the image, copied `/app/efbundle` out and made it executable, then stopped at the first Azure command; the cleanup removed the temporary container and folder and, correctly, tried no firewall-rule removal (none was created). No container or folder was left behind.
+
+Waits for Azure: the A5 Check above (an approval, a real release, a forced post-release failure that rolls back by itself, `rollback.yml` to an earlier commit).
 
 ### A7 (trimmed): backups and the runbook
 

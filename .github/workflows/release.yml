@@ -1,0 +1,129 @@
+# Releases the images that CI built, tested and published (plan A5) to the Azure web app.
+#
+# Called by ci.yml on master with the two digests (plan A4). The job runs in the GitHub environment "production", so it
+# WAITS FOR YOUR APPROVAL, and only then can it sign in to Azure (the pipeline identity trusts that environment only).
+# Then: note the image running now, migrate the database, switch the image, check the site; if anything after the
+# switch fails, switch back to the noted image and fail loudly.
+#
+# Needs these repository or environment VARIABLES (identifiers, not secrets; from the A1 deployment outputs):
+#   AZURE_CLIENT_ID (the pipeline identity), AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID,
+#   AZURE_RESOURCE_GROUP, AZURE_WEBAPP_NAME, AZURE_SQL_SERVER
+name: Release
+
+on:
+  workflow_call:
+    inputs:
+      app_image:
+        description: The application image by digest, ghcr.io/<owner>/bookcart@sha256:...
+        required: true
+        type: string
+      migrate_image:
+        description: The migration image by digest, ghcr.io/<owner>/bookcart-migrate@sha256:...
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write # GitHub's OIDC token, exchanged for an Azure token (no stored password)
+
+# One release at a time, and a release that has started is never cancelled (it may be migrating).
+concurrency:
+  group: release-production
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release to Azure (approval, migrate, switch, check)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment:
+      name: production
+      url: ${{ steps.site.outputs.url }}
+    env:
+      APP_IMAGE: ${{ inputs.app_image }}
+      MIGRATE_IMAGE: ${{ inputs.migrate_image }}
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
+      AZURE_SQL_SERVER: ${{ vars.AZURE_SQL_SERVER }}
+    steps:
+      - name: Check the inputs
+        run: |
+          for v in APP_IMAGE MIGRATE_IMAGE AZURE_RESOURCE_GROUP AZURE_WEBAPP_NAME AZURE_SQL_SERVER; do
+            [ -n "${!v}" ] || { echo "::error::$v is empty (see the variables listed at the top of release.yml)"; exit 1; }
+          done
+          case "$APP_IMAGE$MIGRATE_IMAGE" in *@sha256:*@sha256:*) ;; *) echo "::error::Both images must be given by digest."; exit 1 ;; esac
+      - uses: actions/checkout@v4
+      - name: Sign in to Azure (OIDC, as the pipeline identity)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Find the site and the image it runs now
+        id: site
+        run: |
+          host=$(az webapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_WEBAPP_NAME" --query defaultHostName -o tsv)
+          echo "url=https://$host" >> "$GITHUB_OUTPUT"
+          previous=$(bash deploy/azure/switch-image.sh --current)
+          echo "previous=$previous" >> "$GITHUB_OUTPUT"
+          echo "Site https://$host, running $previous now."
+      # Before the switch: if this fails, the running version is untouched. Migrations must stay backward compatible
+      # (plan A5), because the version running now keeps using the database until the switch, and after a rollback.
+      - name: Migrate the database
+        run: bash deploy/azure/migrate.sh "$MIGRATE_IMAGE"
+      - name: Install sqlcmd (go-sqlcmd, pinned and checksum-checked)
+        run: bash deploy/azure/install-sqlcmd.sh
+      # Idempotent (plan A3): a database created by A1 gets the app's user on the first release; later it only checks
+      # that the app can read and write data and cannot change the schema.
+      - name: Give the app identity its database access
+        env:
+          AZURE_APP_IDENTITY: ${{ vars.AZURE_APP_IDENTITY || 'id-bookcart-app' }}
+        run: bash deploy/azure/grant-app-access.sh "$AZURE_APP_IDENTITY"
+      - name: Switch the app to the new image
+        id: switch
+        run: bash deploy/azure/switch-image.sh "$APP_IMAGE"
+      # Read-only checks of the live site: the pages must be byte for byte the ones in the image that was deployed.
+      - name: Check the site (verify.sh --remote)
+        run: |
+          docker pull --quiet "$APP_IMAGE" > /dev/null
+          bash deploy/verify.sh --remote "${{ steps.site.outputs.url }}" --image "$APP_IMAGE"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Find Chrome
+        run: |
+          chrome=$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)
+          test -n "$chrome"
+          echo "CHROME_PATH=$chrome" >> "$GITHUB_ENV"
+      - name: Check every kind of page in Chrome (pages.js, read-only)
+        working-directory: scripts/smoke
+        env:
+          WEB: ${{ steps.site.outputs.url }}
+        run: |
+          npm ci
+          node pages.js
+      # Only if the switch happened and something after it failed. A failed migration never reaches this point.
+      - name: Roll back to the previous image
+        if: failure() && steps.switch.outcome != 'skipped' && steps.site.outputs.previous != ''
+        env:
+          PREVIOUS_IMAGE: ${{ steps.site.outputs.previous }}
+        run: |
+          echo "::warning::The release failed after the switch; going back to $PREVIOUS_IMAGE."
+          bash deploy/azure/switch-image.sh "$PREVIOUS_IMAGE"
+          bash deploy/verify.sh --remote "${{ steps.site.outputs.url }}"
+          echo "::error::Rolled back to $PREVIOUS_IMAGE. The new release ($APP_IMAGE) is NOT live."
+      - name: Summary
+        if: always()
+        env:
+          PREVIOUS_IMAGE: ${{ steps.site.outputs.previous }}
+          SITE: ${{ steps.site.outputs.url }}
+          OUTCOME: ${{ job.status }}
+        run: |
+          {
+            echo "### Release: $OUTCOME"
+            echo "- Commit: \`$GITHUB_SHA\` (started by $GITHUB_ACTOR; the approval is in this run's deployment log)"
+            echo "- Site: $SITE"
+            echo "- New image: \`$APP_IMAGE\`"
+            echo "- Migrations from: \`$MIGRATE_IMAGE\`"
+            echo "- Previous image (the rollback target): \`$PREVIOUS_IMAGE\`"
+          } >> "$GITHUB_STEP_SUMMARY"

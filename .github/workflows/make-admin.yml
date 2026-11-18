@@ -1,0 +1,41 @@
+# Makes a registered user of the Azure site an administrator (plan A3). Run it by hand from the Actions tab after
+# registering in the site: there is no seeded admin account. It runs in the "production" environment, so it waits for
+# your approval like a release. The user must log out and in again afterwards (the role is part of the login token).
+# Needs the variables listed at the top of release.yml.
+name: Make admin
+
+on:
+  workflow_dispatch:
+    inputs:
+      username:
+        description: The username to promote (registered in the site first)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  make-admin:
+    name: Make a user an administrator
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    env:
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      AZURE_SQL_SERVER: ${{ vars.AZURE_SQL_SERVER }}
+      # Passed through the environment, never pasted into the script: the script validates it before using it.
+      USERNAME_TO_PROMOTE: ${{ inputs.username }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sign in to Azure (OIDC, as the pipeline identity)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Install sqlcmd (go-sqlcmd, pinned and checksum-checked)
+        run: bash deploy/azure/install-sqlcmd.sh
+      - name: Promote the user
+        run: bash deploy/azure/make-admin.sh "$USERNAME_TO_PROMOTE"

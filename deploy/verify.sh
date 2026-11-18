@@ -1,36 +1,70 @@
 #!/usr/bin/env bash
 # Checks that a running deployment is what it should be. Run it after deploy/deploy.sh (CI runs it too).
 #
-#   deploy/verify.sh [base-url]     default: https://<DOMAIN> in HTTPS mode, otherwise http://localhost:<APP_PORT>
+#   deploy/verify.sh [base-url]                           this Docker host; default https://<DOMAIN> or http://localhost:<APP_PORT>
+#   deploy/verify.sh --remote <base-url> [--image <ref>]  any site by URL only (Azure, plan A5): no docker, no deploy/.env
 #
 # It checks that the app is healthy and answers; that every page address serves the right file of the build (the drawn
 # pages for /, /login and /register, the empty client shell for every other page); that the build's own self-check
-# (BookCart/ClientApp/verify-static.js: every file the pages and the CSS refer to exists, no inline script) passes on the
-# files inside the running container; that a font named by the CSS is served; that the security headers are present; and
-# that SQL Server is not published. Exit code 0 when everything passes, 1 otherwise. It changes nothing.
+# (BookCart/ClientApp/verify-static.js: every file the pages and the CSS refer to exists, no inline script) passes; that a
+# font named by the CSS is served; that the security headers are present; and, on this host, that SQL Server is not
+# published. The build's files come from the running app container, or with --image from that image (so the release
+# checks that the site really serves the image it deployed); a --remote check without --image compares no files.
+# Exit code 0 when everything passes, 1 otherwise. It changes nothing.
 set -uo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-if [[ ${1:-} == -h || ${1:-} == --help ]]; then sed -n '2,10p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0; fi
-[[ -f $ENV_FILE ]] && load_env
-base="${1:-}"
-if [[ -z $base ]]; then
-  if https_enabled; then base="https://${DOMAIN:?DOMAIN is empty in deploy/.env}"; else base="http://localhost:${APP_PORT:-8080}"; fi
+usage() { sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+
+remote=false
+image=""
+base=""
+while (( $# > 0 )); do
+  case $1 in
+    -h | --help) usage; exit 0 ;;
+    --remote) remote=true ;;
+    --image)
+      [[ -n ${2:-} ]] || die "--image needs an image reference, e.g. ghcr.io/<owner>/bookcart@sha256:<digest>"
+      image=$2; shift ;;
+    -*) die "Unknown option $1 (see deploy/verify.sh --help)" ;;
+    *) [[ -z $base ]] || die "Only one base URL, please (got '$base' and '$1')"; base=$1 ;;
+  esac
+  shift
+done
+
+if $remote; then
+  [[ -n $base ]] || die "--remote needs the site's address, e.g. deploy/verify.sh --remote https://<app>.azurewebsites.net"
+else
+  [[ -z $image ]] || die "--image only goes with --remote (on this host the files come from the running container)"
+  [[ -f $ENV_FILE ]] && load_env
+  if [[ -z $base ]]; then
+    if https_enabled; then base="https://${DOMAIN:?DOMAIN is empty in deploy/.env}"; else base="http://localhost:${APP_PORT:-8080}"; fi
+  fi
 fi
 base="${base%/}"
-curl_opts=(-s -m 30)
+[[ $base == http://* || $base == https://* ]] || die "The base URL must start with http:// or https:// (got '$base')"
+command -v curl > /dev/null 2>&1 || die "curl is needed and was not found"
+
+# A remote site can be slow on its first request: a free App Service app sleeps when idle and the free database pauses.
+if $remote; then curl_opts=(-s -m 120); else curl_opts=(-s -m 30); fi
 [[ $base == https://localhost* ]] && curl_opts+=(-k)   # Caddy's own certificate authority is not trusted by curl
 
 failures=0
 ok() { say "  ok    $*"; }
 bad() { say "  FAIL  $*"; failures=$((failures + 1)); }
+skip() { say "  skip  $*"; }
 
 # Runs from a work folder inside deploy/, with relative paths: on Windows, docker.exe and node.exe do not understand the
 # /d/... form Git Bash uses for absolute paths.
 work="$DEPLOY_DIR/.verify-tmp"
 rm -rf "$work"; mkdir -p "$work"
-trap 'rm -rf "$work"' EXIT
+probe=""
+cleanup() {
+  [[ -n $probe ]] && docker rm -f "$probe" > /dev/null 2>&1
+  rm -rf "$work"
+}
+trap cleanup EXIT
 cd "$work" || exit 1
 
 expect_status() { # <path> <status> [content type]
@@ -39,9 +73,15 @@ expect_status() { # <path> <status> [content type]
   if [[ $got == "$2 ${3:-}"* ]]; then ok "$1 -> $got"; else bad "$1 -> $got (expected $2 ${3:-})"; fi
 }
 
-say "Checking $base"
+if $remote; then say "Checking $base (remote${image:+, build files from $image})"; else say "Checking $base"; fi
 say "The application"
-if [[ $(docker inspect -f '{{.State.Health.Status}}' "$APP_CONTAINER" 2> /dev/null) == healthy ]]; then ok "container $APP_CONTAINER is healthy"; else bad "container $APP_CONTAINER is not healthy"; fi
+if $remote; then
+  skip "container health (remote mode: only what the URL shows)"
+elif [[ $(docker inspect -f '{{.State.Health.Status}}' "$APP_CONTAINER" 2> /dev/null) == healthy ]]; then
+  ok "container $APP_CONTAINER is healthy"
+else
+  bad "container $APP_CONTAINER is not healthy"
+fi
 expect_status /health 200 text/plain
 expect_status /api/book 200 application/json
 expect_status /api/book/GetCategoriesList 200 application/json
@@ -49,22 +89,44 @@ expect_status /Upload/Default_image.jpg 200 image/jpeg
 expect_status /api/nope 404 application/problem+json
 expect_status /missing-chunk.js 404
 
+# The build's files: from the running container on this host, from the image with --image (without starting it).
+have_files=false
+if ! $remote; then
+  if docker cp "$APP_CONTAINER:/app/wwwroot" wwwroot > /dev/null 2>&1; then have_files=true; else bad "could not copy /app/wwwroot out of $APP_CONTAINER"; fi
+elif [[ -n $image ]]; then
+  if ! command -v docker > /dev/null 2>&1; then
+    bad "--image needs docker, which is not available here"
+  elif ! probe=$(docker create "$image" 2> /dev/null); then
+    probe=""; bad "could not use the image $image (pull it first, or check the reference)"
+  elif docker cp "$probe:/app/wwwroot" wwwroot > /dev/null 2>&1; then
+    have_files=true
+  else
+    bad "could not copy /app/wwwroot out of $image"
+  fi
+fi
+
 say "Every page address serves the right file of the build"
-docker cp "$APP_CONTAINER:/app/wwwroot" wwwroot > /dev/null 2>&1 || bad "could not copy /app/wwwroot out of $APP_CONTAINER"
-served_is() { # <path> <file in the image's wwwroot>
+served_is() { # <path> <file in the build's wwwroot>
+  if ! $have_files; then
+    expect_status "$1" 200 text/html
+    return
+  fi
   curl "${curl_opts[@]}" -o served.tmp "$base$1"
-  if [[ -f wwwroot/$2 ]] && cmp -s served.tmp "wwwroot/$2"; then ok "$1 is $2"; else bad "$1 is not $2 (or the file is missing from the image)"; fi
+  if [[ -f wwwroot/$2 ]] && cmp -s served.tmp "wwwroot/$2"; then ok "$1 is $2"; else bad "$1 is not $2 (or the file is missing from the build)"; fi
 }
+$have_files || skip "no build files to compare with (add --image <ref>): checking status and type only"
 served_is / index.html
 served_is /login login/index.html
 served_is /register register/index.html
 for page in /wishlist /checkout /shopping-cart /books/details/1 /admin/books; do served_is "$page" index.csr.html; done
 
-say "The build's self-check on the files inside the container"
-if command -v node > /dev/null 2>&1 && [[ -f ../../BookCart/ClientApp/verify-static.js ]]; then
+say "The build's self-check on its files"
+if ! $have_files; then
+  skip "no build files (add --image <ref>)"
+elif command -v node > /dev/null 2>&1 && [[ -f ../../BookCart/ClientApp/verify-static.js ]]; then
   if out=$(node ../../BookCart/ClientApp/verify-static.js wwwroot 2>&1); then ok "$(printf '%s' "$out" | tail -1 | sed 's|verify-static: [0-9]* files in .*wwwroot, |verify-static: |')"; else bad "verify-static: $out"; fi
 else
-  say "  skip  node or BookCart/ClientApp/verify-static.js is not available here"
+  skip "node or BookCart/ClientApp/verify-static.js is not available here"
 fi
 
 say "Fonts"
@@ -81,10 +143,19 @@ headers=$(curl "${curl_opts[@]}" -I "$base/")
 for header in x-content-type-options x-frame-options referrer-policy content-security-policy; do
   if grep -qi "^$header" <<< "$headers"; then ok "header $header"; else bad "header $header is missing"; fi
 done
-if [[ -z $(docker port "$SQL_CONTAINER" 2> /dev/null) ]]; then ok "SQL Server has no published port"; else bad "SQL Server is published: $(docker port "$SQL_CONTAINER" | tr '\n' ' ')"; fi
-if https_enabled; then
-  if docker port "$APP_CONTAINER" 8080 2> /dev/null | grep -q '^127\.0\.0\.1:'; then ok "the app's own port is bound to 127.0.0.1 (only Caddy reaches it)"; else bad "the app's port is not bound to 127.0.0.1 in HTTPS mode"; fi
-  if container_running bookcart-caddy; then ok "Caddy is running"; else bad "Caddy is not running"; fi
+if $remote; then
+  skip "SQL Server port, Caddy and the app's port binding (remote mode)"
+  # A public HTTPS site must send plain-HTTP visitors to HTTPS (App Service: httpsOnly).
+  if [[ $base == https://* && $base != https://localhost* ]]; then
+    redirect=$(curl "${curl_opts[@]}" -o /dev/null -w '%{http_code} %{redirect_url}' "http://${base#https://}/")
+    if [[ $redirect =~ ^30[178]\ https:// ]]; then ok "http:// redirects to https:// ($redirect)"; else bad "http:// does not redirect to https:// (got '$redirect')"; fi
+  fi
+else
+  if [[ -z $(docker port "$SQL_CONTAINER" 2> /dev/null) ]]; then ok "SQL Server has no published port"; else bad "SQL Server is published: $(docker port "$SQL_CONTAINER" | tr '\n' ' ')"; fi
+  if https_enabled; then
+    if docker port "$APP_CONTAINER" 8080 2> /dev/null | grep -q '^127\.0\.0\.1:'; then ok "the app's own port is bound to 127.0.0.1 (only Caddy reaches it)"; else bad "the app's port is not bound to 127.0.0.1 in HTTPS mode"; fi
+    if container_running bookcart-caddy; then ok "Caddy is running"; else bad "Caddy is not running"; fi
+  fi
 fi
 
 say

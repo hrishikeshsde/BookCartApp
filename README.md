@@ -68,7 +68,7 @@ One command deploys the whole application (SQL Server, the app and, for a domain
 1. `git clone https://github.com/hrishikeshsde/BookCartApp.git` and `cd BookCartApp`.
 2. `./deploy/deploy.sh` (on Windows: `scripts\release.bat`). The first run asks two questions: the **domain** (leave it blank for plain HTTP on port 8080) and, for a domain, an **e-mail address** for the certificate. It then generates the secrets into `deploy/.env`, builds the images, starts SQL Server, applies the database migrations, starts the app (and Caddy for HTTPS) and waits until the app is healthy. It prints the address when it is done.
 3. Open that address, register your account, then make it an administrator: `./deploy/make-admin.sh <username>` (log out and in again afterwards).
-4. Check the deployment at any time: `./deploy/verify.sh` (the app is healthy, every page is served from the right file of the build, the fonts load, the security headers are there, SQL Server is not published).
+4. Check the deployment at any time: `./deploy/verify.sh` (the app is healthy, every page is served from the right file of the build, the fonts load, the security headers are there, SQL Server is not published). Any other site can be checked by its address alone: `./deploy/verify.sh --remote https://<site> [--image <image>]` (with `--image`, the pages are compared with that image's files).
 
 If a script answers "Permission denied", run it through bash: `bash deploy/deploy.sh`.
 

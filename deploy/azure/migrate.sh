@@ -14,23 +14,14 @@
 set -euo pipefail
 
 image=${1:?usage: deploy/azure/migrate.sh <migrate-image>}
-rg=${AZURE_RESOURCE_GROUP:?AZURE_RESOURCE_GROUP is not set}
-server=${AZURE_SQL_SERVER:?AZURE_SQL_SERVER is not set}
-database=${DATABASE:-BookDB}
-rule="github-${GITHUB_RUN_ID:-manual}-$$"
+# shellcheck source=lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 work=$(mktemp -d)
 probe=""
-rule_created=false
 # shellcheck disable=SC2317  # called by the EXIT trap, which ShellCheck cannot see
 cleanup() {
-  if $rule_created; then
-    if az sql server firewall-rule delete -g "$rg" -s "$server" -n "$rule" --output none; then
-      echo "Removed the temporary firewall rule $rule."
-    else
-      echo "::error::Could not remove the firewall rule $rule on $server. Remove it by hand: az sql server firewall-rule delete -g $rg -s $server -n $rule"
-    fi
-  fi
+  close_sql_firewall
   [[ -n $probe ]] && docker rm -f "$probe" > /dev/null 2>&1
   rm -rf "$work"
 }
@@ -42,17 +33,13 @@ probe=$(docker create "$image")
 docker cp "$probe:/app/efbundle" "$work/efbundle"
 chmod +x "$work/efbundle"
 
-fqdn=$(az sql server show -g "$rg" -n "$server" --query fullyQualifiedDomainName -o tsv)
-ip=$(curl -s -m 30 https://api.ipify.org)
-[[ $ip =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Could not find this runner's public IPv4 address (got '$ip')."; exit 1; }
-echo "Opening the firewall for $ip (rule $rule) ..."
-az sql server firewall-rule create -g "$rg" -s "$server" -n "$rule" --start-ip-address "$ip" --end-ip-address "$ip" --output none
-rule_created=true
+fqdn=$(sql_fqdn)
+open_sql_firewall
 
 # "Active Directory Default" signs in as whoever `az login` is (the pipeline identity on the runner). No password.
-connection="Server=tcp:$fqdn,1433;Initial Catalog=$database;Encrypt=True;Connection Timeout=120;Authentication=Active Directory Default"
+connection="Server=tcp:$fqdn,1433;Initial Catalog=$DATABASE;Encrypt=True;Connection Timeout=120;Authentication=Active Directory Default"
 for attempt in 1 2 3; do
-  echo "Applying the migrations to $database on $fqdn (attempt $attempt of 3) ..."
+  echo "Applying the migrations to $DATABASE on $fqdn (attempt $attempt of 3) ..."
   if "$work/efbundle" --connection "$connection"; then
     echo "The database is up to date."
     exit 0

@@ -141,7 +141,7 @@ Shared building blocks (built once in Part D, reused by Part A):
 | `.github/workflows/ci.yml` | A | the stack job scans and pushes the images it tested on `master` and calls `release.yml` | A4 |
 | `.github/workflows/release.yml` | A | reusable: approval, migrate, switch the image, check, roll back on failure | A5 |
 | `.github/workflows/rollback.yml`, `make-admin.yml`, `uptime.yml` | A | manual rollback to a SHA; the first admin behind the approval; the 6-hourly uptime check | A5, A3, A8 |
-| `deploy/azure/*.sh` | A | `migrate.sh` and `switch-image.sh` (written 2026-11-17 with A5); database user setup and `make-admin` | A5, A3 |
+| `deploy/azure/*.sh` | A | `migrate.sh`, `switch-image.sh` (A5); `lib.sh`, `install-sqlcmd.sh`, `grant-app-access.sh`, `make-admin.sh` (A3); all written and tested 2026-11-17 | A3, A5 |
 | `deploy/verify.sh` | A | a mode that checks only a URL (no `docker` commands) | A5 |
 | `docs/AZURE_SIGNUP_AND_A0_RUNBOOK.md` | A | sign-up guide and the by-hand first deployment (rewritten for the free design) | A0 |
 | `docs/RUNBOOKS.md`, one line in `README.md` | A | release, roll back, restore, rotate the JWT key, free-tier limits | A7 |
@@ -769,6 +769,26 @@ The image is a parameter. The infra workflow (A2) reads the image the app curren
 3. **First admin:** `deploy/azure/make-admin.sh <username>` runs the same validated update as `deploy/make-admin.sh`, through `sqlcmd` with Entra authentication; `make-admin.yml` runs it behind the `production` approval.
 
 **Check:** the app identity cannot create a table (a deliberate failing test); a migration run leaves no firewall rule behind, even when it fails; `make-admin` promotes a registered user and refuses a bad name.
+
+#### A3 results (written and tested 2026-11-17 without Azure; the Azure run waits for A0/A1)
+
+Files (all in `deploy/azure/` unless noted; scripts executable except the sourced `lib.sh`):
+- **`lib.sh`** (new, shared): `sql_fqdn`, `open_sql_firewall` / `close_sql_firewall` (a temporary rule for this machine's IPv4 address; closing is safe to call twice and reports a failure loudly with the command to fix it by hand), `run_sql` (one T-SQL batch with go-sqlcmd and `--authentication-method ActiveDirectoryDefault`, i.e. the `az login` identity; three attempts, because the free database may be resuming). `migrate.sh` (A5) now uses it, so the firewall logic exists once.
+- **`install-sqlcmd.sh`** (new): go-sqlcmd **v1.10.0**, downloaded from Microsoft's GitHub release and **checked against its SHA-256** (`92516d98...`, matched by hashing the file) before it is installed. The Ubuntu 24.04 runner image has no sqlcmd.
+- **`grant-app-access.sh`** (new): creates the app identity's database user if missing, adds `db_datareader` and `db_datawriter` if missing, then prints its roles and **fails if it has `db_owner`, `db_ddladmin`, `db_securityadmin` or `db_accessadmin`**. This replaces the plan's "the app cannot create a table" test, which would need to sign in as the app's identity: the role check proves the same from the pipeline.
+- **`make-admin.sh`** (new): the Azure twin of `deploy/make-admin.sh`, same name rule (`^[A-Za-z0-9_.@-]{1,50}$`, the defence against injection), one batch that looks before it changes (so a retry cannot do harm): `missing` (error), `already`, or `changed:1`.
+- **`.github/workflows/make-admin.yml`** (new, manual, input `username`, environment `production` = your approval; the name is passed through an environment variable, never pasted into the script).
+- **`.github/workflows/release.yml`**: after the migration it installs sqlcmd and runs `grant-app-access.sh` on **every** release (idempotent; a fresh A1 database gets its app user on the first release). The identity name is the variable `AZURE_APP_IDENTITY`, default `id-bookcart-app`.
+
+**Design change found in Microsoft's documentation (CREATE USER, 2026-11-17).** The plan's `CREATE USER ... FROM EXTERNAL PROVIDER` (with or without `WITH OBJECT_ID`) makes the SQL server look the identity up in Microsoft Entra; when a **service principal** (our pipeline identity) runs it, the server's own identity needs the Entra **Directory Readers** role, which only a tenant administrator can grant. `WITH OBJECT_ID` is documented as a repair for duplicate display names, not as a way around the lookup. The script therefore uses Microsoft's documented form **without validation**: `CREATE USER [id-bookcart-app] WITH SID = <the identity's CLIENT id as 16 bytes>, TYPE = E` (the documentation says to use the client id, not the object id, for a user-assigned identity). The statement is built as text and run with `EXEC`, because `SID` needs a binary literal. This resolves A0 item 4 on paper; A0 or the first release confirms it on Azure.
+
+Tested on 2026-11-17:
+- `install-sqlcmd.sh` in a fresh **Ubuntu 24.04** container: installs and runs `sqlcmd v1.10.0`; a copy with a wrong checksum is **refused** and installs nothing.
+- `grant-app-access.sh` and `make-admin.sh` **with the real go-sqlcmd against real SQL Server**, in a scratch database `A3_Test` in the local stack's SQL container (dropped afterwards; `BookDB` untouched). Only `az`, the IP lookup and the Entra sign-in (replaced by `sa`) were stubbed; the stub logged every firewall call. **11 of 11 passed:** the SID expression gives a 16-byte literal; first grant adds both roles; a second grant changes nothing; a user with `db_ddladmin` is **refused**; a bad identity name is rejected before anything runs; `make-admin` promotes a user, reports "already" twice, fails for an unknown user, rejects an injection attempt and a missing argument. **Every run that opened the firewall closed it, including the failing ones.** (The first run of the tests failed on the grant: SQL Server parses a whole batch before running it, and on-premises SQL Server 2022 does not know the Azure-only `CREATE USER` syntax; the `EXEC` form fixed that too.)
+- `migrate.sh` after the change to `lib.sh`, with the real published migrate image: bundle copied out, stops at the first Azure command here, cleanup ran, no container or folder left.
+- actionlint (all four workflows) and ShellCheck (all nine deployment scripts): clean.
+
+Waits for Azure: the user creation with `WITH SID ... TYPE = E` on Azure SQL, the app connecting as that user, and `make-admin.yml` behind the approval.
 
 ### A4: One image, built once, tested, then published
 

@@ -71,6 +71,14 @@ jobs:
       # (plan A5), because the version running now keeps using the database until the switch, and after a rollback.
       - name: Migrate the database
         run: bash deploy/azure/migrate.sh "$MIGRATE_IMAGE"
+      - name: Install sqlcmd (go-sqlcmd, pinned and checksum-checked)
+        run: bash deploy/azure/install-sqlcmd.sh
+      # Idempotent (plan A3): a database created by A1 gets the app's user on the first release; later it only checks
+      # that the app can read and write data and cannot change the schema.
+      - name: Give the app identity its database access
+        env:
+          AZURE_APP_IDENTITY: ${{ vars.AZURE_APP_IDENTITY || 'id-bookcart-app' }}
+        run: bash deploy/azure/grant-app-access.sh "$AZURE_APP_IDENTITY"
       - name: Switch the app to the new image
         id: switch
         run: bash deploy/azure/switch-image.sh "$APP_IMAGE"

@@ -83,6 +83,32 @@ jobs:
       # Every file the pages and the CSS refer to exists, and no inline script or handler (the CSP would block it).
       - run: npm run verify:dist
 
+  infra:
+    # The Azure templates (plan A1) compile, pass the linter with no warning, and the parameter file builds. Offline:
+    # nothing signs in to Azure. A broken template fails here, not in the first Azure run.
+    name: Infrastructure (Bicep)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Bicep (pinned)
+        run: az bicep install --version v0.49.2
+      - name: Compile and lint the templates
+        env:
+          # Placeholders: the parameter file reads these from the environment and fails without them.
+          CONTAINER_IMAGE: ghcr.io/example/bookcart@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          JWT_SECRET: placeholder-placeholder-placeholder-placeholder
+        run: |
+          out=$(mktemp -d)
+          {
+            for f in infra/bootstrap.bicep infra/main.bicep; do
+              az bicep build --file "$f" --outdir "$out"
+              az bicep lint --file "$f"
+            done
+            az bicep build-params --file infra/parameters/production.bicepparam --outfile "$out/production.json"
+          } 2>&1 | tee "$out/log.txt"
+          # az exits 0 on warnings; any warning or error fails the job.
+          if grep -Ei '(warning|error)' "$out/log.txt"; then exit 1; fi
+
   stack:
     name: Docker stack (deploy, update, browser checks, publish)
     needs: [backend, frontend]

@@ -1,13 +1,13 @@
 // BookCart on the Azure free tier (plan A1): everything the app needs, at zero cost.
 //
 //   App Service Free F1 (Linux) running the container from ghcr.io, a user-assigned identity for the app,
-//   an Entra-only SQL server with the free-tier database, and a USD 1 budget alert.
+//   and an Entra-only SQL server with the free-tier database. (The budget is in bootstrap.bicep: it is created once.)
 //
 // Run bootstrap.bicep once first (it creates the pipeline identity this template refers to). Then:
 //   az deployment group what-if -g rg-bookcart -f infra/main.bicep -p infra/parameters/production.bicepparam
 //   az deployment group create  -g rg-bookcart -f infra/main.bicep -p infra/parameters/production.bicepparam
-// The parameter file reads the image, the secrets and the e-mail address from environment variables, so none of them
-// is in the repository. Nothing secret is an output.
+// The parameter file reads the image and the secrets from environment variables, so none of them is in the
+// repository. Nothing secret is an output. Safe to re-run: the same resource group always gets the same names.
 
 targetScope = 'resourceGroup'
 
@@ -32,15 +32,6 @@ param geminiApiKey string = ''
 
 @description('Enforce the Content-Security-Policy (D4 found no violations). false only reports violations.')
 param enforceCsp bool = true
-
-@description('Who receives the budget alerts.')
-param budgetEmail string
-
-@description('Monthly budget in the billing currency. The expected cost is zero, so any alert means a mistake.')
-param budgetAmount int = 1
-
-@description('First day of the month the budget starts, yyyy-MM-01 (the current month or later when it is created; it must not change afterwards).')
-param budgetStartDate string
 
 // Global names (web app, SQL server) carry a suffix derived from the resource group, so the same group always gets
 // the same names and a second run changes nothing.
@@ -79,18 +70,6 @@ module webapp 'modules/webapp.bicep' = {
     jwtSecret: jwtSecret
     geminiApiKey: geminiApiKey
     enforceCsp: enforceCsp
-  }
-}
-
-module budget 'modules/budget.bicep' = {
-  name: 'budget'
-  params: {
-    name: 'budget-${baseName}'
-    amount: budgetAmount
-    startDate: budgetStartDate
-    contactEmails: [
-      budgetEmail
-    ]
   }
 }
 

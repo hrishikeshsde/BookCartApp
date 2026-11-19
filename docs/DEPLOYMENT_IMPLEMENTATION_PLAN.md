@@ -3,7 +3,7 @@
 Scope: how BookCart is deployed. **One application image, two deployment targets.**
 
 - **Part D: a Docker server.** One host with Docker runs SQL Server, the app and Caddy (HTTPS), and one command deploys and updates it. Phases **D0 to D7**. **D0 to D5 are done and committed.**
-- **Part A: Azure free tier, released by CI/CD.** A study deployment at zero cost: App Service Free F1 running the container, the Azure SQL Database free offer, the image on GitHub Container Registry, an approval before each release, an automatic rollback, a budget alert. Phases **A0 to A5, A7 and A8** (A6, A9 and A10 skipped). **A plan only: nothing in it is started** (an `infra/` draft exists for the earlier paid design).
+- **Part A: Azure free tier, released by CI/CD.** A study deployment at zero cost: App Service Free F1 running the container, the Azure SQL Database free offer, the image on GitHub Container Registry, an approval before each release, an automatic rollback, a budget alert. Phases **A0 to A5, A7 and A8** (A6, A9 and A10 skipped). Everything that can be built without an Azure account is built and checked (A1 templates, A3, A4, A5); **nothing runs on Azure yet** (the Microsoft account sign-up is blocked for now).
 
 This document merges two earlier ones: the Docker plan (written first, and mostly implemented) and a separate Azure plan. Section 4 lists the conflicts found between them and how each was resolved. Each phase ends with a check you can run. A finished phase keeps its results ("D3 results") directly under its plan text, as the record of what was built and where it differed from the plan, so this file can be picked up without the conversations that produced it.
 
@@ -19,7 +19,7 @@ This document merges two earlier ones: the Docker plan (written first, and mostl
 | D5 | A CI job that deploys the stack and checks it | **Done** 2026-10-25, **confirmed on GitHub** 2026-11-10 (the pull-request run #19 and the merge run #20 were green; the `stack` job took 2 min 54 s on a cold cache) |
 | D6 | Documentation and tidy-up, **both targets** | **Docker half done** 2026-11-10 (README, `CLAUDE.md`, F7-5 closed, executable bits); follow-up 2026-11-15 (`ContainerRepository` removed, `ENFORCE_CSP`). The Azure half is **skipped** (2026-11-16: `docs/RUNBOOKS.md` from A7 and one README line replace it) |
 | D7 | Optional: a limited SQL login for the Docker target | Not started, optional |
-| A0 to A8 | Azure free tier: the by-hand first deployment, Bicep, GitHub trust, database access, image publishing, release and rollback, trimmed backups and runbook, trimmed monitoring | **A4 done 2026-11-16** (confirmed on GitHub); the rest not started (the Microsoft account sign-up is blocked for now). **Rescoped 2026-11-16 to zero cost** (A6, A9, A10 skipped; A7, A8 trimmed). The `infra/` draft of 2026-11-15 was written for the paid design and is rewritten in A1 |
+| A0 to A8 | Azure free tier: the by-hand first deployment, Bicep, GitHub trust, database access, image publishing, release and rollback, trimmed backups and runbook, trimmed monitoring | **A4 done** (confirmed on GitHub); **A3, A5 written, tested offline and merged** (CI #25, #26, 2026-11-18); **A1 templates compiled and linted, checked by CI** (2026-11-19). Waiting for Azure: A0, the A1 deployment, A2, the first real A3/A5 runs, A7, A8 (the Microsoft account sign-up is blocked for now). **Rescoped 2026-11-16 to zero cost** (A6, A9, A10 skipped; A7, A8 trimmed) |
 
 ## 2. Requirement and decisions
 
@@ -725,16 +725,16 @@ Because everything is free, there is **no throwaway spike**: you build the real 
 
 ### A1: Infrastructure as code (Bicep, free resources only)
 
-**Prep status (2026-11-16): written offline in `infra/` for the free design** (`bootstrap.bicep`, `main.bicep`, `modules/webapp.bicep`, `modules/sql.bicep`, `modules/budget.bicep`, `parameters/production.bicepparam`, `README.md`). The free-tier database and budget property names were checked on Microsoft Learn. **Not compiled yet** (no Bicep CLI on the PC) and not deployed: A1 is done only when the Check below passes on Azure, after A0.
+**Status (2026-11-19): written, compiled and linted with no warning, and checked by CI on every run; not deployed** (see "A1 results" below). A1 is done only when the Check below passes on Azure, after A0.
 
-**Once, by you, before the first run:** delete the A0 resource group (**only one free database is allowed per subscription**), create `rg-bookcart`, and deploy `infra/bootstrap.bicep`. It creates the **pipeline identity** with its federated credential for `repo:<owner>/BookCartApp:environment:production` and **Contributor** on the group. It is kept out of `main.bicep` because creating a role assignment needs Owner rights, which the pipeline does not have; it was A2's `bootstrap.sh` in the first version of this plan.
+**Once, by you, before the first run:** delete the A0 resource group (**only one free database is allowed per subscription**), create `rg-bookcart`, and deploy `infra/bootstrap.bicep`. It creates the **pipeline identity** with its federated credential for `repo:<owner>/BookCartApp:environment:production` and **Contributor** on the group, and the **budget** (item 4 below). It is kept out of `main.bicep` because creating a role assignment needs Owner rights, which the pipeline does not have; it was A2's `bootstrap.sh` in the first version of this plan.
 
 `infra/main.bicep` (the same resource group) creates:
 
 1. **App identity:** a user-assigned managed identity (the database user is created for it in A3).
 2. **App Service:** a Free F1 Linux plan; the web app with the container image (a parameter), `httpsOnly`, minimum TLS 1.2, FTPS off, basic publishing credentials off (FTP and SCM), `clientAffinityEnabled: false`; no Always On and no health check path (see the limits table).
 3. **Azure SQL:** a logical server with **Entra-only authentication**, the **pipeline identity** as its Entra administrator, TLS 1.2, the "Allow Azure services" firewall rule (private networking is out of scope, section 6; Entra-only authentication is what keeps everyone else out); the database `BookDB` on the **free offer** with exhaustion behaviour **auto-pause**.
-4. **Budget:** USD 1 per month on the resource group, e-mail at 50 % and 100 % of actual and forecast cost.
+4. **Budget:** USD 1 per month on the resource group, e-mail at 50 % and 100 % of actual and forecast cost. **Created by `bootstrap.bicep`, not `main.bicep`** (changed 2026-11-19, see A1 results).
 
 App settings (all set by Bicep, so a re-run never loses one):
 
@@ -750,9 +750,21 @@ App settings (all set by Bicep, so a re-run never loses one):
 | `Storage__UploadFolder`, `Security__DataProtectionKeysPath` | `/home/data/uploads`, `/home/data/keys` |
 | `Security__EnforceCsp` | `true` (D4 found no violations; one setting to change if something breaks) |
 
-The image is a parameter. The infra workflow (A2) reads the image the app currently runs and passes it, so an infrastructure run never rolls the app back. The parameter file reads the image, `JWT_SECRET`, `GEMINI_API_KEY` and the budget e-mail from environment variables (`readEnvironmentVariable`), so none of them is in the repository.
+The image is a parameter. The infra workflow (A2) reads the image the app currently runs and passes it, so an infrastructure run never rolls the app back. The parameter file reads the image, `JWT_SECRET` and `GEMINI_API_KEY` from environment variables (`readEnvironmentVariable`), so none of them is in the repository.
 
 **Check:** `what-if` is clean; a deployment into an empty resource group succeeds and the site works after A3 and A5; a second run changes nothing; no secret is in the repository or an output; *Cost analysis* still shows 0.00.
+
+#### A1 results (2026-11-19: compiled and checked without Azure; the deployment waits for A0)
+
+Tools: Azure CLI 2.93.0 and Bicep 0.49.2 on the PC.
+
+- `az bicep build` and `az bicep lint` on `bootstrap.bicep` and `main.bicep` (with all three modules): **no error and no warning** on the first compile. The resource types and API versions are known to Bicep, so a misspelt property would have been a warning.
+- `az bicep build-params` on `production.bicepparam`: **without** the environment variables it fails and names each missing one (`CONTAINER_IMAGE`, `JWT_SECRET`); with them it builds, and `GEMINI_API_KEY` defaults to empty.
+- No output of either template contains a secret (`jwtSecret` and `geminiApiKey` are `@secure()` and appear in no output).
+- **Design change: the budget moved to `bootstrap.bicep`.** Microsoft's `Microsoft.Consumption/budgets` reference: the start date must be the first of a month and **cannot be in the past, except the current month**. The draft had a fixed `2026-12-01` in the parameter file, which would fail if A1 were first deployed after December, and `main.bicep` is re-run by the pipeline month after month. The bootstrap is run once, by you; its `budgetStartDate` defaults to the current month (`utcNow`), and your e-mail address is a bootstrap parameter, so it never has to become a GitHub secret (`BUDGET_EMAIL` is gone from the parameter file).
+- **New CI job "Infrastructure (Bicep)"** (`ci.yml`, no Azure sign-in): pins Bicep v0.49.2, compiles and lints both templates, builds the parameter file with placeholder values, and **fails on any warning** (az exits 0 on warnings, so the job searches the output). Tested locally: it passes on the real templates, and an unused parameter added on purpose fails it. actionlint clean.
+
+Waits for Azure (the Check above): `what-if` clean, a first deployment into an empty group, a second run that changes nothing, *Cost analysis* at 0.00. Still unproven: the image by digest in `linuxFxVersion` on F1, and uid 1654 writing to `/home`.
 
 ### A2: Trust between GitHub and Azure
 
@@ -789,6 +801,11 @@ Tested on 2026-11-17:
 - actionlint (all four workflows) and ShellCheck (all nine deployment scripts): clean.
 
 Waits for Azure: the user creation with `WITH SID ... TYPE = E` on Azure SQL, the app connecting as that user, and `make-admin.yml` behind the approval.
+
+**Confirmed on GitHub 2026-11-18 (A3, A5.1 and A5.2 merged together):**
+- **Pull request run** (CI #25, run 44305367606, `43f7346`): backend, frontend and stack jobs green; the stack job's checks, browser smoke test and Trivy scan passed; **Publish skipped**; **Release skipped**.
+- **Master run** (CI #26, run 44347271246, merge `1ab0bde`): all three jobs green and **Publish ran**. `ghcr.io/hrishikeshsde/bookcart:1ab0bde...` is `sha256:74d03aef...` and `bookcart-migrate:1ab0bde...` is `sha256:4293824a...`; both were read anonymously from ghcr.io, so the packages are still public. **Release skipped**, because `AZURE_RELEASE_ENABLED` is not set, so `master` stays green without Azure.
+- GitHub lists **CI, Release, Rollback and Make admin** as active workflows. Rollback and Make admin must not be run before Azure exists.
 
 ### A4: One image, built once, tested, then published
 
